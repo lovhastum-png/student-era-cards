@@ -101,6 +101,7 @@ http://localhost:8080/学生时代牌-网页版.html
 ## 四、协作方式
 
 团队协作流程、提交规范与素材规范见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
+托管平台怎么选、怎么把仓库推上去，见 **[docs/托管平台选择与上传.md](docs/托管平台选择与上传.md)**。
 
 简版流程：
 

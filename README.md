@@ -2,6 +2,15 @@
 
 一个校园题材的**卡牌 Roguelike 网页游戏**。纯前端：不需要后端、不需要编译、不需要装依赖，打开 HTML 就能玩。
 
+> **仓库**：<https://github.com/lovhastum-png/student-era-cards> （私有，需邀请后才能访问）
+>
+> 新成员拿到邀请后：
+> ```bash
+> git clone https://github.com/lovhastum-png/student-era-cards.git
+> cd student-era-cards
+> git lfs install && git lfs pull   # 必做，否则音视频拿到的是空指针，游戏会没声音
+> ```
+
 - 当前版本：**v0.17.4**
 - 技术栈：原生 HTML + CSS + JavaScript（无框架、无构建工具）
 - 素材：PNG 立绘/插画 + WAV/M4V 音频视频

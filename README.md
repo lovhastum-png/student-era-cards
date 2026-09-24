@@ -2,9 +2,9 @@
 
 一个校园题材的**卡牌 Roguelike 网页游戏**。纯前端：不需要后端、不需要编译、不需要装依赖，打开 HTML 就能玩。
 
-> **仓库**：<https://github.com/lovhastum-png/student-era-cards> （私有，需邀请后才能访问）
+> **仓库**：<https://github.com/lovhastum-png/student-era-cards> （公开仓库，直接访问即可）
 >
-> 新成员拿到邀请后：
+> 克隆下来就能跑：
 > ```bash
 > git clone https://github.com/lovhastum-png/student-era-cards.git
 > cd student-era-cards

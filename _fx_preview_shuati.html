@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>再刷一题 · 技能特效预览</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0e0e12;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:#e9e9f0;overflow:hidden}
+  #wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px}
+
+  /* ---------- 舞台 ---------- */
+  #stageBox{position:relative;flex:0 0 auto}
+  #stage{position:relative;width:1280px;height:720px;overflow:hidden;border-radius:10px;
+         box-shadow:0 12px 44px rgba(0,0,0,.65);background:#000;transform-origin:top left}
+  #bg{position:absolute;inset:0;background:url("金榜题名v0.17.4/其他插画/牌局背景.png") center/cover no-repeat;opacity:.95}
+  #bgDim{position:absolute;inset:0;background:radial-gradient(ellipse at 34% 60%,rgba(0,0,0,0) 0%,rgba(0,0,0,.45) 78%)}
+
+  #portrait{position:absolute;left:300px;top:300px;height:446px;width:auto;
+            filter:drop-shadow(0 8px 22px rgba(0,0,0,.55))}
+
+  /* 特效层：四帧叠在立绘上，共用同一枢轴。
+     立绘 left300 + 宽254.4/2 → 中心 x=427.2；
+     特效 600×600 的中心压到 y=558（而非立绘几何中心 523），
+     这样帧1 的纸团落到她胸口以下、不糊住脸，同时帧3 的金环仍留在画面内。 */
+  #fxLayer{position:absolute;left:127px;top:258px;width:600px;height:600px;pointer-events:none}
+  .fx-frame{position:absolute;inset:0;width:100%;height:100%;opacity:0;will-change:opacity;
+            transform-origin:center center}
+  .fx-frame img{width:100%;height:100%;display:block}
+
+  /* 光环爆发（与游戏里 .fx-burst 同一套观感） */
+  #burst{position:absolute;left:127px;top:258px;width:600px;height:600px;pointer-events:none;opacity:0}
+  #burst .core{position:absolute;inset:0;border-radius:50%;
+     background:radial-gradient(circle,rgba(255,215,0,.55),rgba(255,215,0,.13) 42%,transparent 70%)}
+  #burst .ring{position:absolute;inset:-6%;border-radius:50%;border:2.5px solid rgba(255,255,255,.85);
+     box-shadow:0 0 16px rgba(255,255,255,.55)}
+
+  /* 状态徽标 */
+  #badge{position:absolute;left:285px;top:286px;padding:4px 11px;border-radius:13px;font-size:15px;
+     background:rgba(24,30,48,.92);border:1px solid rgba(255,205,80,.75);color:#ffd45e;
+     box-shadow:0 0 14px rgba(255,200,60,.45);opacity:0;white-space:nowrap}
+  /* 战斗日志 */
+  #logline{position:absolute;left:60px;bottom:26px;font-size:16px;color:#ffe9a8;
+     background:rgba(12,14,22,.8);border-left:3px solid rgba(255,205,80,.85);
+     padding:6px 14px;border-radius:0 6px 6px 0;opacity:0;white-space:nowrap}
+  /* 摸到的两张逻辑卡 */
+  .hand{position:absolute;bottom:-40px;width:118px;border-radius:7px;opacity:0;
+     box-shadow:0 6px 18px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.18)}
+  #c1{left:560px}
+  #c2{left:690px}
+
+  /* 帧号提示 */
+  #hud{position:absolute;right:12px;top:12px;font-size:13px;line-height:1.7;text-align:right;
+     background:rgba(8,10,16,.72);border:1px solid rgba(255,255,255,.14);border-radius:8px;
+     padding:8px 12px;font-variant-numeric:tabular-nums}
+  #hud b{color:#ffd45e}
+  #hud .warn{color:#ff8b6b}
+
+  /* ---------- 控制条 ---------- */
+  #bar{width:1280px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+       background:#17171e;border:1px solid #2a2a36;border-radius:10px;padding:10px 14px}
+  button{background:#262634;color:#e9e9f0;border:1px solid #3a3a4c;border-radius:7px;
+     padding:7px 15px;font-size:14px;cursor:pointer;font-family:inherit}
+  button:hover{background:#32324a}
+  button.on{background:#3d3418;border-color:#8a7326;color:#ffd45e}
+  #scrub{flex:1;min-width:240px;accent-color:#ffd45e}
+  #clock{font-size:13px;color:#9a9aac;font-variant-numeric:tabular-nums;min-width:104px;text-align:right}
+  #hint{width:1280px;font-size:12.5px;color:#8a8a9c;line-height:1.65}
+  #hint code{color:#c9c9d6;background:#1d1d27;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stageBox">
+    <div id="stage">
+      <div id="bg"></div>
+      <div id="bgDim"></div>
+
+      <img id="portrait" src="金榜题名v0.17.4/立绘/薛诗蕾Q版_副本.png" alt="薛诗蕾">
+
+      <div id="burst"><div class="core"></div><div class="ring"></div></div>
+
+      <div id="fxLayer">
+        <div class="fx-frame" data-i="0"><img src="金榜题名v0.17.4/其他插画/fx_shuati_1.png" alt="帧1"></div>
+        <div class="fx-frame" data-i="1"><img src="金榜题名v0.17.4/其他插画/fx_shuati_2.png" alt="帧2"></div>
+        <div class="fx-frame" data-i="2"><img src="金榜题名v0.17.4/其他插画/fx_shuati_3.png" alt="帧3"></div>
+        <div class="fx-frame" data-i="3"><img src="金榜题名v0.17.4/其他插画/fx_shuati_4.png" alt="帧4"></div>
+      </div>
+
+      <div id="badge">🎯刷题-1费×2</div>
+      <img class="hand" id="c1" src="金榜题名v0.17.4/卡牌插画/刷题.png" alt="">
+      <img class="hand" id="c2" src="金榜题名v0.17.4/卡牌插画/刷题.png" alt="">
+      <div id="logline">🎯 再刷一题: 摸2张逻辑卡，接下来2张逻辑卡消耗-1</div>
+
+      <div id="hud">
+        当前帧 <b id="hudFrame">—</b><br>
+        <span id="hudNote"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="bar">
+    <button id="btnPlay">▶ 播放</button>
+    <button id="btnSlow" data-speed="0.25">0.25×</button>
+    <button id="btnNormal" class="on" data-speed="1">1×</button>
+    <input id="scrub" type="range" min="0" max="1.1" step="0.001" value="0">
+    <button id="btnZoom">缓慢放大（+6%）</button>
+    <span id="clock">0.000 / 1.100 s</span>
+  </div>
+  <div id="hint">
+    拖动时间轴可逐帧对齐检查（播放时拖动会自动暂停）。四个特效帧共用同一个 1024×1024 枢轴，
+    所以交叉淡入时纸张不会跳位。<code>帧4</code> 目前是「塌回球体」的待重做版，插入序列会看出收尾在收缩而不是消散。
+  </div>
+</div>
+
+<script>
+(function(){
+  /* ===== 时间轴（秒），与真实实现同一套参数 ===== */
+  const FADE   = 0.09;                 // 帧间交叉淡入
+  const ONSET  = [0.00, 0.26, 0.48, 0.70];
+  const HOLD   = 0.88;                // 末帧开始淡出
+  const OUT    = 0.22;
+  const T_END  = HOLD + OUT;           // 1.10 s
+
+  const T_BURST = 0.00, D_BURST = 0.74;
+  const T_SHAKE = 0.00, D_SHAKE = 0.36;
+  const T_BADGE = 0.34;
+  const T_LOG   = 0.46;
+  const T_CARD  = [0.58, 0.70];
+
+  const FRAME_NAME = ['帧1 起手（锚点）','帧2 承 · 中段扩散','帧3 转 · 爆发峰值','帧4 收 · 飘散收尾（待重做）'];
+
+  const $ = s => document.querySelector(s);
+  const frameEls = [...document.querySelectorAll('.fx-frame')];
+  const stage = $('#stage'), burst = $('#burst'), badge = $('#badge'),
+        logline = $('#logline'), c1 = $('#c1'), c2 = $('#c2'),
+        hudFrame = $('#hudFrame'), hudNote = $('#hudNote'),
+        scrub = $('#scrub'), clock = $('#clock');
+
+  const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+  const ease  = v => 1-Math.pow(1-clamp(v,0,1),3);       // ease-out cubic
+  const clamp01 = v => clamp(v,0,1);
+
+  let zoomOn = false;
+  let fitScale = 1;                // 舞台自适应缩放，与抖动合成为一个 transform
+
+  /* ===== 纯函数：任意时刻 t 的全部状态 ===== */
+  function renderAt(t){
+    /* -1- 特效帧：交叉淡入 */
+    frameEls.forEach((el,i)=>{
+      const fin  = clamp01((t - ONSET[i]) / FADE);
+      const fadeStart = (i < 3) ? ONSET[i+1] : HOLD;
+      const fout = clamp01(1 - (t - fadeStart) / FADE);
+      el.style.opacity = Math.min(fin, fout);
+    });
+
+    /* 演示选项：整体缓慢放大 6%，让爆发更有推近感 */
+    const zoom = zoomOn ? (1 + 0.06 * clamp01(t / T_END)) : 1;
+    frameEls.forEach(el=>{ el.style.transform = 'scale(' + zoom + ')'; });
+    burst.style.transform = 'scale(' + zoom + ')';
+
+    /* -2- 光环爆发 */
+    const pb = clamp01((t - T_BURST) / D_BURST);
+    if (t >= T_BURST && t <= T_BURST + D_BURST){
+      const s = ease(pb) * 1.6;
+      burst.style.opacity = (1 - ease(pb)) * 0.95;
+      burst.querySelector('.core').style.transform = 'scale(' + Math.max(0.001, s) + ')';
+      /* 环的终值收小：真实游戏里 burst 盒是按立绘尺寸算的（约 1.4× 立绘），
+         预览里立绘放大过，若照搬 1.75 的终值环会铺满整屏，看不清纸张效果 */
+      burst.querySelector('.ring').style.transform = 'scale(' + Math.max(0.001, 0.30 + s * 0.42) + ')';
+    } else {
+      burst.style.opacity = 0;
+    }
+
+    /* -3- 屏幕抖动（与舞台自适应缩放合成为一个 transform，避免互相覆盖） */
+    const ps = (t - T_SHAKE) / D_SHAKE;
+    let dx = 0, dy = 0;
+    if (ps >= 0 && ps <= 1){
+      const damp = Math.pow(1 - ps, 2) * 7;
+      dx = Math.sin(t * 71.3) * damp;
+      dy = Math.cos(t * 63.7) * damp;
+    }
+    stage.style.transform = 'scale(' + fitScale + ') translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+
+    /* -4- 状态徽标 */
+    const pb2 = clamp01((t - T_BADGE) / 0.16);
+    badge.style.opacity = pb2;
+    badge.style.transform = 'translateY(' + ((1 - ease(pb2)) * -8).toFixed(2) + 'px)';
+
+    /* -5- 战斗日志 */
+    logline.style.opacity = clamp01((t - T_LOG) / 0.18);
+
+    /* -6- 摸到的两张逻辑卡 */
+    [[c1,T_CARD[0]],[c2,T_CARD[1]]].forEach(([el,st])=>{
+      const p = clamp01((t - st) / 0.26);
+      el.style.opacity = p;
+      el.style.bottom = (-40 + ease(p) * 44).toFixed(1) + 'px';
+    });
+
+    /* -7- HUD */
+    let cur = -1;
+    for (let i = 0; i < 4; i++){ if (t >= ONSET[i]) cur = i; }
+    if (t < ONSET[0] - 0.001) cur = -1;
+    hudFrame.textContent = cur < 0 ? '—' : (cur + 1) + ' / 4';
+    hudNote.innerHTML = cur < 0 ? '' : (cur === 3
+        ? '<span class="warn">' + FRAME_NAME[3] + '</span>'
+        : FRAME_NAME[cur]);
+
+    clock.textContent = t.toFixed(3) + ' / ' + T_END.toFixed(3) + ' s';
+  }
+
+  /* ===== 播放循环 ===== */
+  let playing = false, speed = 1, t0 = 0, elapsed = 0;
+  function tick(now){
+    if (!playing) return;
+    const dt = (now - t0) / 1000; t0 = now;
+    elapsed += dt * speed;
+    if (elapsed >= T_END){ elapsed = T_END; renderAt(elapsed); stop(); scrub.value = T_END; return; }
+    renderAt(elapsed);
+    scrub.value = elapsed;
+    requestAnimationFrame(tick);
+  }
+  function play(){
+    if (elapsed >= T_END) elapsed = 0;
+    t0 = performance.now(); playing = true; $('#btnPlay').textContent = '❚❚ 暂停';
+    requestAnimationFrame(tick);
+  }
+  function stop(){ playing = false; $('#btnPlay').textContent = '▶ 播放'; }
+  function replay(){ elapsed = 0; renderAt(0); scrub.value = 0; if(!playing) play(); else { t0 = performance.now(); } }
+
+  $('#btnPlay').onclick = () => { playing ? stop() : play(); };
+  document.querySelectorAll('[data-speed]').forEach(b=>{
+    b.onclick = () => {
+      speed = parseFloat(b.dataset.speed);
+      document.querySelectorAll('[data-speed]').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+    };
+  });
+  $('#btnZoom').onclick = e => { zoomOn = !zoomOn; e.currentTarget.classList.toggle('on', zoomOn); renderAt(elapsed); };
+
+  scrub.oninput = () => { stop(); elapsed = parseFloat(scrub.value); renderAt(elapsed); };
+  scrub.max = T_END;
+
+  /* 尺寸自适应 */
+  function fit(){
+    const box = $('#stageBox');
+    fitScale = Math.min((innerWidth - 40) / 1280, (innerHeight - 190) / 720, 1);
+    box.style.width  = (1280 * fitScale) + 'px';
+    box.style.height = (720  * fitScale) + 'px';
+    renderAt(elapsed);
+  }
+
+  addEventListener('resize', fit);
+  fit();
+  renderAt(0);
+  play();
+})();
+</script>
+</body>
+</html>

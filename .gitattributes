@@ -1,0 +1,40 @@
+# ════════════════════════════════════════════════════
+#  换行符与二进制属性（多人协作的关键配置，勿删）
+# ════════════════════════════════════════════════════
+
+# 默认按文本规范化换行，防止 Windows / macOS 协作者互相污染整份文件
+* text=auto
+
+# ── 源码统一使用 LF ──────────────────────────────
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.py      text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+
+# git 自身配置保持 LF（跨平台最安全）
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+# ── Windows 脚本必须 CRLF，否则双击执行会失败 ────
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+*.ps1     text eol=crlf
+*.vbs     text eol=crlf
+
+# ── 图片 / 字体：二进制，禁止换行符转换 ──────────
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.ttf     binary
+*.ico     binary
+
+# ── 大体积媒体：交给 Git LFS，避免仓库膨胀 ──────
+*.m4v     filter=lfs diff=lfs merge=lfs -text
+*.mp4     filter=lfs diff=lfs merge=lfs -text
+*.wav     filter=lfs diff=lfs merge=lfs -text
+*.ogg     filter=lfs diff=lfs merge=lfs -text
+*.mp3     filter=lfs diff=lfs merge=lfs -text

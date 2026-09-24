@@ -1,0 +1,21 @@
+BUFF 图标替换说明
+
+将美术图片放在本文件所在目录即可。建议使用正方形 PNG，推荐尺寸 128×128 或 256×256。
+游戏会把图片裁切到 34×34 的正方形图标中，层数数字由游戏自动显示在中央，不需要画进图片。
+
+基础状态文件名：
+rationality.png  理性
+sensibility.png   感性
+serious.png       认真
+spirit.png        精神
+vulnerable.png    脆弱
+smart.png         聪明
+accuracy.png      精准
+inspiration.png   灵感
+careful.png       细心
+wushi.png         无视
+arrogance.png     骄傲
+shuangdie.png     霜蝶
+
+其他战斗增益未放置图片时会自动显示 Emoji 占位图。它们的文件名可以在 js/scenes.js 的 buffIconHtml 调用处查看；
+也可以在 G.BUFF_ICONS 中为任意状态指定新的相对路径。

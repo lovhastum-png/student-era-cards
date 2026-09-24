@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>学生时代牌 — 卡牌Roguelike</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#0a1628;color:#e0e8f0;overflow:hidden;height:100vh;user-select:none}
+/* 全局文字边界：允许中英文和长词换行，由脚本在空间不足时继续缩小。 */
+button,.btn,.card,.paper-box,.modal-box,.te-fullscreen,#mapPanel{overflow-wrap:anywhere;word-break:break-word}
+[data-autofit="single"]{max-width:100%;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;line-height:1.15}
+[data-autofit="block"]{width:100%;max-width:100%;max-height:100%;white-space:normal;overflow:hidden;line-height:1.35}
+.card .desc{min-height:0;overflow:hidden!important}.card .desc-content{display:block;width:100%;max-height:100%}
+.btn,.te-opt,.sce-option{white-space:normal;min-width:0;max-width:100%;line-height:1.25}
+.autofit-min{overflow:auto!important;scrollbar-width:thin}
+#app{width:100%;height:100vh;display:flex;flex-direction:column;max-width:900px;margin:0 auto;position:relative}
+#app.menu-full{max-width:100%}
+#app.battle-full{max-width:100%;background:linear-gradient(rgba(18,34,53,.52),rgba(31,50,78,.58)),url('其他插画/教室战斗背景.png') center/cover no-repeat;background-color:#1a2a3a}
+/* 战斗界面按 16:9 画布排版。超宽/偏窄屏幕留出背景，不再横向或纵向拉散战斗 UI。 */
+body:has(#app.battle-full){display:flex;align-items:center;justify-content:center;background:#0a1628}
+#app.battle-full{width:min(100vw,177.7778vh);height:min(100vh,56.25vw);margin:0;flex:none}
+
+/* 龙族小说演出：动态壁纸层（内容之下，2026-08-22升级：静态jpg兜底 + 生成视频铺底循环播放） */
+.lz-bg{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;
+  background:url('其他插画/龙族.jpg') center 42%/cover no-repeat, #0a0d12; /* 静态图+深色兜底 */
+  opacity:0;filter:blur(12px);transform:scale(1.06);   /* 默认：墨色雾化+轻微放大，供入场晕染 */
+  transition:opacity .7s ease, filter 1.1s ease, transform 1.2s ease}
+.lz-bg.show{opacity:1;filter:blur(0);transform:scale(1)} /* 水墨渐变入场：雾化墨色逐渐晕开成型 */
+/* 动态视频铺满底层 */
+.lz-bg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;opacity:0;transition:opacity .8s ease}
+/* 暗角压场再叠到视频之上，保证画面氛围统一 */
+.lz-bg::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:radial-gradient(circle at 50% 42%, rgba(12,16,24,.06) 0% 34%, rgba(4,8,14,.42) 62%, rgba(2,4,10,.6) 97%)}
+/* 龙族常驻樱花雨（2026-08-22）：整层全屏、不挡操作，单片樱花自顶飘落+左右摆动+自转 */
+.lz-petal-fall{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+.lz-petal-fall .pf{position:absolute;top:-6vmin;opacity:.95;
+  background:radial-gradient(circle at 35% 30%, #fff0f3, #ffd3dc 55%, #f5a9b8);
+  border-radius:80% 0 80% 0;
+  animation:pf-fall linear forwards}
+@keyframes pf-fall{
+  0%{transform:translate(0,0) rotate(0)}
+  25%{transform:translate(var(--sway),26vh) rotate(calc(var(--rot)*0.25))}
+  50%{transform:translate(calc(var(--sway)*-0.7),52vh) rotate(calc(var(--rot)*0.55))}
+  75%{transform:translate(var(--sway),78vh) rotate(calc(var(--rot)*0.8))}
+  100%{transform:translate(0,106vh) rotate(var(--rot))}
+}
+/* 银河·星尘（2026-08-22）：细小辉光星点自顶缓缓飘落，闪烁、左右摆动 */
+.ambient-star{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+.ambient-star .ps{position:absolute;top:-2vmin;border-radius:50%;
+  background:radial-gradient(circle, rgba(255,255,255,.98), rgba(190,228,255,.85) 38%, rgba(180,220,255,.12) 72%);
+  box-shadow:0 0 1.4vmin rgba(205,232,255,.95), 0 0 3vmin rgba(180,220,255,.45);
+  animation:ps-drift linear forwards}
+@keyframes ps-drift{
+  0%{transform:translate(0,0) scale(.8);opacity:.1}
+  15%{opacity:.95}
+  35%{transform:translate(var(--sway),20vh) scale(1.25);opacity:.85}
+  55%{transform:translate(calc(var(--sway)*-0.7),42vh) scale(.9);opacity:.95}
+  75%{transform:translate(var(--sway),64vh) scale(1.2);opacity:.7}
+  100%{transform:translate(0,88vh) scale(.8);opacity:.08}
+}
+/* 魔戒·圣光屑（2026-08-22）：暖金光点自底缓缓上浮，柔和闪烁（如圣光粒子升腾） */
+/* 罗生门·冷雨（2026-08-23 改版）：细长雨丝自顶急落，冷蓝白色调，微斜 */
+.ambient-rain{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+.ambient-rain .pr{position:absolute;top:-10vh;width:2px !important;height:9vh !important;border-radius:2px;
+  background:linear-gradient(to bottom, rgba(170,200,235,0), rgba(185,215,245,.75) 55%, rgba(210,230,250,.95));
+  box-shadow:0 0 4px rgba(160,195,235,.5);
+  animation:pr-fall linear forwards}
+@keyframes pr-fall{
+  0%{transform:translate(0,0);opacity:0}
+  8%{opacity:.9}
+  100%{transform:translate(calc(var(--sway)*1.4),118vh);opacity:.35}
+}
+.ambient-holy{position:fixed;inset:0;z-index:6;pointer-events:none;overflow:hidden}
+.ambient-holy .ph{position:absolute;bottom:-2vmin;border-radius:50%;
+  background:radial-gradient(circle, rgba(255,255,246,.98), rgba(255,236,180,.9) 34%, rgba(255,220,150,.1) 70%);
+  box-shadow:0 0 1.5vmin rgba(255,240,190,.95), 0 0 3.2vmin rgba(255,220,150,.4);
+  animation:ph-rise linear forwards}
+@keyframes ph-rise{
+  0%{transform:translate(0,0) scale(.7);opacity:0}
+  12%{opacity:.95}
+  34%{transform:translate(var(--sway),-18vh) scale(1.25);opacity:.9}
+  54%{transform:translate(calc(var(--sway)*-0.6),-38vh) scale(.95);opacity:.8}
+  76%{transform:translate(var(--sway),-58vh) scale(1.15);opacity:.55}
+  100%{transform:translate(0,-84vh) scale(.7);opacity:0}
+}
+/* 内容层提升到壁纸之上：牌局内容/卡牌不被背景遮挡 */
+.battle-full #topBar,.battle-full #main,.battle-full #bottomBar{position:relative;z-index:1}
+/* 花瓣全屏遮盖特效（源自 花瓣.html，2026-08-22 接入龙族进/退场）：大樱花瓣瞬间铺满→停顿→旋转四散 */
+.petal-overlay{position:fixed;inset:0;z-index:90;pointer-events:none;overflow:hidden}
+.petal-overlay .st-petal{position:absolute;border-radius:50% 0 50% 0;will-change:transform}
+.petal-overlay .st-petal.scatter{animation:stScatter var(--tdur,.8s) cubic-bezier(.25,.46,.45,.94) var(--tdel,0s) forwards}
+@keyframes stScatter{
+  0%{transform:translate(0,0) rotate(var(--rot0,0deg)) scale(var(--sc0,2.5));opacity:1}
+  100%{transform:translate(var(--tx,400px),var(--ty,300px)) rotate(var(--rot1,720deg)) scale(.5);opacity:0}}
+
+/* Top bar */
+#topBar{background:#152840;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:2px solid #0a1220;min-height:52px;flex-shrink:0}
+#topBar .title{font-weight:bold;font-size:16px;flex:1}
+#topBar .stat{font-size:12px;color:#8ab4f8;background:#0d1f33;padding:4px 10px;border-radius:4px;white-space:nowrap}
+
+/* Main content area */
+#main{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;scroll-behavior:smooth}
+#main::-webkit-scrollbar{width:4px}
+#main::-webkit-scrollbar-thumb{background:#2a4a6a;border-radius:2px}
+
+/* Bottom bar */
+#bottomBar{background:#152840;padding:8px 16px;border-top:2px solid #0a1220;display:flex;gap:10px;min-height:48px;align-items:center;flex-shrink:0;flex-wrap:wrap;font-size:13px}
+
+/* Cards */
+.card{background:#1a3050;border:2px solid #2a4a6a;border-radius:10px;padding:14px 16px;cursor:pointer;transition:all 0.15s;position:relative;min-width:130px;max-width:200px;flex-shrink:0}
+.card:hover{transform:translateY(-3px);box-shadow:0 6px 16px rgba(0,0,0,0.4)}
+.card:active{transform:scale(0.97)}
+.card.logic{border-color:#f05050;background:#2a1520}
+.card.idea{border-color:#5090f0;background:#15202a}
+.card.answer{border-color:#f0c040;background:#2a2515}
+.card.tool{border-color:#40c080;background:#1a2a22}
+.card .cost{position:absolute;top:8px;right:10px;background:#0a1628;color:#ffd700;font-weight:bold;font-size:15px;padding:2px 8px;border-radius:12px;min-width:26px;text-align:center}
+.card .name{font-weight:bold;font-size:15px;margin-bottom:4px;padding-right:32px}
+.card .desc{font-size:12px;color:#b0c8e0;line-height:1.4}
+.card .type-badge{font-size:10px;padding:2px 6px;border-radius:4px;display:inline-block;margin-bottom:4px}
+.card .type-badge{display:none!important}
+.popup-card-type{margin:-1px 0 6px;color:#9fc3e8;font-size:10px;font-weight:700}
+.card.logic .type-badge{background:#f05050;color:#fff}
+.card.idea .type-badge{background:#5090f0;color:#fff}
+.card.answer .type-badge{background:#f0c040;color:#1a1a00}
+.card.tool .type-badge{background:#40c080;color:#06280f}
+.card.trap .type-badge{background:#8850b8;color:#fff}
+.card.disabled{opacity:0.45;pointer-events:none;filter:grayscale(0.5)}
+.card.unplayable{opacity:0.6;border-style:dashed;cursor:not-allowed}
+/* 沉睡卡牌梦幻特效（2026-09-09）：整卡梦幻滤镜 + 浮动气泡；苏醒时气泡戳破、滤镜解除 */
+.card.card-sleeping{filter:sepia(.22) hue-rotate(230deg) saturate(1.3) brightness(.93);animation:sleep-dream 2.8s ease-in-out infinite}
+.card.card-sleeping::after{content:'';position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(150,110,255,.3),rgba(110,160,255,.12) 45%,rgba(255,150,240,.2));mix-blend-mode:screen;pointer-events:none}
+@keyframes sleep-dream{0%,100%{filter:sepia(.22) hue-rotate(230deg) saturate(1.3) brightness(.93)}50%{filter:sepia(.32) hue-rotate(258deg) saturate(1.55) brightness(1.02)}}
+.sleep-bubble{position:absolute;border-radius:50%;pointer-events:none;z-index:1;background:radial-gradient(circle at 32% 30%,rgba(255,255,255,.8),rgba(190,150,255,.22) 55%,rgba(150,110,255,.15) 78%);border:1px solid rgba(205,180,255,.6);box-shadow:0 0 6px rgba(170,130,255,.35);animation:sleep-float var(--sb-dur,3.4s) ease-in-out infinite}
+@keyframes sleep-float{0%,100%{transform:translateY(2px) translateX(0);opacity:.7}50%{transform:translateY(-10px) translateX(4px);opacity:1}}
+.sleep-badge{position:absolute;top:6px;left:8px;font-size:11px;color:#cdb8ff;text-shadow:0 0 6px rgba(150,110,255,.9);pointer-events:none;z-index:2}
+/* 苏醒戳破：fxLayer 上的瞬时气泡爆裂（2026-09-09） */
+.fx-bubble-pop{position:absolute;border-radius:50%;pointer-events:none;border:2px solid rgba(200,170,255,.95);background:radial-gradient(circle at 35% 32%,rgba(235,220,255,.9),rgba(170,130,255,.3) 55%,rgba(140,100,255,.12) 78%);box-shadow:0 0 10px rgba(180,140,255,.6);animation:sleep-pop .5s ease-out forwards}
+@keyframes sleep-pop{0%{transform:scale(.3);opacity:1}45%{transform:scale(1.15);opacity:.95}100%{transform:scale(1.9);opacity:0}}
+.card-hover-popup{display:none}.card-hover-popup>b{display:block;color:#ffd878;font-size:13px;margin-bottom:5px}.popup-keyword{margin-top:6px;padding-top:5px;border-top:1px solid #ffffff18}.popup-keyword em{color:#ffd05f;font-style:normal;margin-right:5px}.kw-tip{color:#ffd36a;font-weight:700}.card-global-tip{position:fixed;z-index:99999;display:none;pointer-events:none;max-width:280px;padding:12px 14px;border-radius:9px;border:1px solid #d5aa57;background:rgba(8,19,34,.97);color:#dcecff;font-size:11px;line-height:1.55;white-space:normal;box-shadow:0 8px 24px #000b}.card-global-tip>b{display:block;color:#ffd878;font-size:13px;margin-bottom:5px}
+
+/* Buttons */
+.btn{background:#1e4080;color:#fff;border:2px solid #3060c0;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer;font-weight:bold;transition:all 0.15s;white-space:nowrap}
+.btn:hover{background:#2550a0;border-color:#4080e0}
+.btn:active{transform:scale(0.95)}
+.btn.primary{background:#c04020;border-color:#e05030}
+.btn.primary:hover{background:#d05030}
+.btn.success{background:#208040;border-color:#30a050}
+.btn.small{padding:6px 12px;font-size:12px}
+.btn.danger{background:#802020;border-color:#a03030}
+
+/* Modal overlay */
+#modalOverlay{position:fixed;inset:0;background:rgba(5,10,20,0.75);display:flex;align-items:center;justify-content:center;z-index:100}
+#modalOverlay.over-event{z-index:140}
+.modal-box{background:#152840;border:2px solid #3060c0;border-radius:12px;padding:16px;width:min(420px,90vw);max-height:80vh;overflow-y:auto}
+.modal-box.modal-te{background:transparent;border:none;padding:0;width:min(660px,94vw);max-height:88vh;overflow-y:auto}
+.card.selected{border-color:#ffd700!important;box-shadow:0 0 10px rgba(255,215,0,0.5);transform:translateY(-2px)}
+.btn.warn{background:#806020;border-color:#a08030}
+
+/* Map */
+/* 地图节点=插画本身当按钮（用户定 2026-08-17）：无框无底，状态用光晕/透明度表达 */
+.map-node{width:76px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:34px;border:none;background:transparent;cursor:pointer;transition:all 0.2s;position:relative;flex-shrink:0}
+.map-node.reachable{animation:pulseArt 1.5s infinite}
+.map-node.done{opacity:0.65}
+.map-node.locked{opacity:0.4;pointer-events:none}
+.map-node.pv-avail.locked{pointer-events:auto;cursor:help}
+.map-node.pv-avail{cursor:help}
+.map-node.boss{width:88px;height:88px;font-size:38px}
+.map-node.current{filter:drop-shadow(0 0 14px rgba(255,215,0,.95))}
+@keyframes pulseArt{0%,100%{filter:drop-shadow(0 0 8px rgba(64,224,96,.55))}50%{filter:drop-shadow(0 0 22px rgba(64,224,96,1))}}
+
+.map-label{font-size:8px;color:#a0b8d0;text-align:center;position:absolute;bottom:-16px;white-space:nowrap;width:60px;left:50%;transform:translateX(-50%)}
+/* 节点插画（用户提供：战斗/事件/搭档节点；可前往=绿版，当前=黄版，其余=原色） */
+.map-node-art{width:92%;height:92%;object-fit:contain;pointer-events:none;filter:drop-shadow(0 3px 6px rgba(0,0,0,.45))}
+.map-node.current{opacity:1}
+/* 地图：从左往右排列（用户定 2026-08-16）：推进步=横向列，分支上下堆叠，连接线横向 */
+.map-row{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 4px;min-width:56px;justify-content:center}
+.map-connector{width:16px;height:2px;background:#2a4a6a;margin:auto 0;flex-shrink:0}
+.map-branch{display:flex;flex-direction:column;gap:8px;justify-content:center;padding:0 4px}
+.map-branch-col{display:flex;flex-direction:column;align-items:center;gap:0}
+.map-hwrap{display:flex;flex-direction:row;align-items:center;gap:0;margin:auto}
+/* 地图整体居中（用户定 2026-08-16）：主区域纵向flex，节点条在剩余空间双轴居中 */
+#main.map-mode{display:flex;flex-direction:column;position:relative}
+.map-scroll{display:flex;flex:0 0 190px;min-height:180px;overflow-x:auto;align-items:center;padding:8px 0}
+/* 节点弹窗右侧大屏（2026-08-21）：地图右侧固定信息面板，点击节点显示，点空白关闭 */
+#mapPanel{position:relative;left:auto;right:auto;top:auto;bottom:auto;box-sizing:border-box;flex:0 0 auto;align-self:center;width:min(1560px,98%);height:clamp(315px,48vh,495px);margin:0 auto 4px;background:#fbf1d8;border:4px solid #c9ad75;border-radius:18px;padding:18px 24px 18px 190px;overflow-y:auto;z-index:20;display:block;visibility:hidden;opacity:0;box-shadow:0 10px 28px rgba(70,45,18,.28);color:#4a3822;transition:opacity .14s ease}
+#mapPanel.open{visibility:visible;opacity:1}
+.bundle-product{grid-column:span 2}.bundle-row{display:flex;align-items:center;justify-content:center;gap:10px}.bundle-half{min-width:0;flex:1}.bundle-plus{font-size:34px;font-weight:bold;color:#9b6c25}
+#mapPanel .mp-title{font-size:15px;font-weight:bold;color:#ffd700;text-align:center;margin-bottom:8px;letter-spacing:1px}
+#mapPanel .mp-row{font-size:12px;color:#a0b8d0;margin:4px 0;line-height:1.5}
+#mapPanel .mp-cards{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:12px;margin-top:10px;padding:8px 4px 18px}
+#mapPanel .mp-status{text-align:center;font-size:12px;margin:10px 0;font-weight:bold}
+#mapPanel .mp-hint{color:#6a8aaa;font-size:12px;text-align:center;margin-top:30%;line-height:1.8}
+#mapPanel .mp-go-wrap{position:fixed;left:var(--map-go-left,24px);top:var(--map-go-top,50%);width:142px;transform:translateY(-50%);display:flex;justify-content:center;pointer-events:none;z-index:24}#mapPanel .mp-go{width:126px;height:52px;pointer-events:auto;border:3px solid #9b6c25!important;border-radius:5px!important;outline:3px solid #d2b06d;outline-offset:5px;box-shadow:inset 0 0 0 2px #f7e8bd,0 5px 12px rgba(73,47,13,.3);letter-spacing:4px}#mapPanel .map-preview-card{width:120px;height:185px;flex:0 0 120px}.map-scroll{flex:0 0 190px;min-height:180px}
+/* 天赋大屏事件框（2026-08-21）：大屏专属角色事件框 */
+/* 全屏天赋事件/选天赋（2026-08-21）：先全屏剧情对话，再全屏三选页 */
+.te-fullscreen{position:fixed;inset:0;z-index:120;background:linear-gradient(180deg,#f6f9fd 0%,#e6eefb 100%);display:flex;flex-direction:column;align-items:center;overflow:hidden}
+.te-fullscreen:after{content:'';position:absolute;left:0;right:0;bottom:0;height:14px;background:repeating-linear-gradient(-45deg,#AECBEB 0 18px,#ffffff 18px 26px)}
+.te-fullscreen .te-holes{position:absolute;left:16px;bottom:20px;display:flex;gap:6px;z-index:1}
+.te-fullscreen .te-holes i{width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid #AECBEB}
+.te-fullscreen .te-top{font-size:16px;color:#3d6fa8;font-weight:bold;margin:22px 0 4px;text-align:center;letter-spacing:3px}
+.te-fullscreen .te-name{font-size:22px;color:#c04020;font-weight:bold;text-align:center;margin-bottom:18px;letter-spacing:4px}
+.te-fullscreen .te-narr{width:min(700px,86vw);background:#eef4fb;border:1px solid #d5e7f7;border-radius:12px;padding:22px 180px 22px 26px;font-size:17px;color:#24466b;line-height:2.1;min-height:150px;white-space:pre-wrap;flex:1;box-sizing:border-box}
+/* 事件奖励条（2026-09-09）：选项结算后在剧情文本下方展示获得的奖励 */
+.te-reward{display:flex;align-items:center;gap:8px;margin:12px auto 0;width:fit-content;padding:8px 20px;border:1px solid rgba(255,180,60,.65);border-radius:999px;background:linear-gradient(90deg,rgba(255,200,80,.18),rgba(255,150,60,.1));color:#8a4a10;font-size:15px;font-weight:bold;text-shadow:0 1px 0 rgba(255,255,255,.5);animation:rewardPop .45s ease-out}
+@keyframes rewardPop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+.te-fullscreen #te-opts{width:min(700px,86vw);margin-top:12px}
+.te-fullscreen .te-opt{display:block;width:100%;text-align:left;background:#fff7f7;border:2px solid #ffd2d2;color:#FF6B6B;border-radius:10px;padding:14px 16px;font-size:16px;cursor:pointer;margin-top:12px;font-family:inherit}
+.te-fullscreen .te-opt:disabled{opacity:.55;cursor:default}
+.te-fullscreen .te-cursor{display:inline-block;width:2px;height:16px;background:#ff9d5c;vertical-align:-2px;animation:tsBlink .8s steps(2) infinite}
+.te-fullscreen .te-ava{position:absolute;right:16px;bottom:22px;height:46vh;max-height:340px;object-fit:contain;pointer-events:none;z-index:1}
+.te-fullscreen .te-pick{width:min(700px,86vw);display:flex;flex-direction:column;gap:14px;flex:1;justify-content:center;padding-bottom:24px}
+.te-fullscreen .te-pick .card{max-width:100%;width:100%;cursor:pointer;margin:0}
+@keyframes tsBlink{50%{opacity:0}}
+
+/* Battle arena */
+#handArea{display:flex;gap:8px;overflow-x:auto;padding:8px 0;flex-wrap:nowrap;min-height:100px;align-items:flex-start}
+#handArea::-webkit-scrollbar{height:3px}
+#handArea::-webkit-scrollbar-thumb{background:#2a4a6a}
+/* 出牌区无边框（用户定 2026-08-16）：直接铺在牌局背景上 */
+#playerZone{text-align:center;padding:8px;background:#152028;border-radius:8px;margin-bottom:8px;border:2px solid #204060}
+
+/* ===== 战斗布局 v2：中心出牌区 + 底部面板 ===== */
+#main.battle-mode{overflow:hidden;padding:0;display:flex;flex-direction:column}
+#battleStage{flex:1;display:flex;flex-direction:row;overflow:hidden;padding:10px 12px 4px;min-height:0;gap:6px;position:relative}
+/* 战斗对半分割（用户定 2026-08-16）：上半=怪物 下半=玩家，各有出牌区+手牌区，紧贴无间隙 */
+.stage-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;gap:0}
+.half{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+/* 半场无背景框（只要牌局背景图，用户定 2026-08-16）；中心虚线已移除，改放：玩家生命上方+怪物手牌下方（用户定 2026-08-18） */
+.monster-half{background:transparent}
+.player-half{background:transparent}
+/* 怪物半场=行布局（左右对调+主列与玩家一致，用户定 2026-08-18）：主列[属性行→手牌行(手牌在生命下方)] ｜ 右列[立绘、名字+手牌数] */
+.monster-half{flex-direction:row;overflow:visible}
+.monster-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:visible;padding:4px 8px 0 10px}
+.monster-side{width:140px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;min-height:0;padding:4px 0 0;border-left:1.5px dashed rgba(220,235,255,.3)}
+/* 怪物右列（对应玩家左列旋转180°）：生命水晶在上（圆形，LoR 风格 2026-08-21），名字+手牌数在下 */
+#monsterPortraitBox{border:none;position:relative;background:transparent;overflow:visible}
+#monsterInfo{flex-shrink:0;text-align:center;padding:0 2px}
+#monsterInfo .mhand-count{font-size:10px;color:#c8a0f0;line-height:1.5;margin-top:4px}
+/* 怪物手牌行（主列顶部，与玩家手牌行绕中心对称）；怪物属性行（中部，与玩家生命体力行对称） */
+/* 怪物手牌=与玩家等大的竖版卡（用户定 2026-08-18）：4张150px卡放不下时横向滚动，不换行 */
+#monsterHandRow{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 8px 8px;flex-wrap:nowrap;overflow-x:auto;min-height:185px;border-bottom:1.5px dashed rgba(220,235,255,.3)} /* 手牌下方虚线（与玩家生命上方虚线绕中心对称） */
+#monsterHandRow .mhand-big{flex-shrink:0;width:120px;height:185px;cursor:help;transform:none}
+#monsterHandRow .mhand-big .q-orb-wrap{display:none} /* 怪物卡无品质概念 */
+/* 怪物卡背（任务1：手牌背面朝玩家，只露数量）；卡牌样式/怪物卡背.png 为待出图资源，缺失时回退渐变 */
+.card.card-back{
+  background-image:url('卡牌样式/怪物卡背.png'),linear-gradient(160deg,#3a2a5a 0%,#1e1430 100%);
+  background-size:cover,cover;background-position:center;
+  border:2px solid rgba(180,140,255,.55);border-radius:8px;
+  box-shadow:inset 0 0 18px rgba(0,0,0,.45);
+  position:relative;overflow:hidden;cursor:help;
+}
+.card.card-back::after{
+  content:'👾';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:54px;opacity:.82;text-shadow:0 0 14px rgba(180,140,255,.7);pointer-events:none;
+}
+.monster-piles{display:flex;gap:6px;margin-top:6px;justify-content:center}
+.monster-pile{width:52px;height:75px;flex:none;align-self:flex-start} /* 怪物牌堆比玩家手牌牌堆小，避免挤压立绘 */
+/* 玩家半场=行布局：左立绘列（技能在上+立绘撑满到底，底与卡牌底持平）+ 右主列（BUFF→生命→手牌） */
+.player-half{flex-direction:row;overflow:visible}
+.player-side{position:relative;width:140px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;min-height:0;padding:4px 0 0;border-right:1.5px dashed rgba(220,235,255,.3)}
+/* 双方生命球放在角色右侧的战斗留白中，避免压住左侧角色立绘。 */
+#dualNexusStack{position:absolute;z-index:12;left:calc(100% + 92px);top:calc(-100% + 205px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:20px;padding:22px 0 10px;overflow:visible;pointer-events:auto}
+#dualNexusStack #monsterPortraitBox,#dualNexusStack #portraitBox{display:flex;align-items:center;justify-content:center;overflow:visible}
+#dualNexusStack .nexus{width:100px;height:100px}
+#dualNexusStack .nexus-tab{left:calc(100% + 18px)}
+/* 玩家主列内容贴底（用户定 2026-08-18）：BUFF/生命/手牌全部下降，手牌底与立绘底持平（立绘 flex:1 撑满到底） */
+.player-main{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;overflow:visible;padding:4px 10px 0 8px}
+/* 左侧出牌记录 */
+#logRail{position:relative;z-index:102;width:40px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px}
+#logToggle{width:100%;background:rgba(21,40,64,.6);border:none;border-radius:8px;color:#8ab4f8;font-size:10px;cursor:pointer;padding:8px 0;line-height:1.6;transition:all .15s}
+#logToggle:hover{border-color:#ffd700;color:#ffd700}
+#logToggle.on{background:#1a2a44;border-color:#ffd700;color:#ffd700}
+#battleTalentToggle{width:36px;min-height:44px;border:1px solid #b58bff;border-radius:7px;background:#17213a;color:#e3d5ff;font-size:10px;line-height:1.3;cursor:pointer;padding:3px 0}
+#battleTalentToggle:hover{background:#6d48a8;color:#fff;box-shadow:0 0 10px rgba(181,139,255,.8)}
+/* 记录面板：米黄底+绝对定位不挤动战斗区+底部与怪物手牌底部持平（用户定 2026-08-18）；left=padding12+logRail36+gap6=54px；高度=怪物手牌底286-面板顶10=276px（实测 2026-08-18：手牌行257=卡240+padding16+边框1.5，顶29；absolute 使战斗区不再被挤窄换行） */
+#playLogPanel{position:absolute;left:54px;top:10px;width:0;overflow:hidden;display:flex;flex-direction:column;transition:width .25s ease;background:#e3d2ae;border:1.5px dashed rgba(140,105,50,.45);border-radius:8px;z-index:101}
+#playLogPanel.open{width:230px;height:138px}
+#playLogHeader{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#5a4630;padding:6px 8px 4px;white-space:nowrap;flex-shrink:0;min-width:200px}
+.pl-close{cursor:pointer;color:#8a6a3a;font-size:12px}
+.pl-close:hover{color:#5a4630}
+#playLogList{flex:1;overflow-y:auto;min-width:200px;padding:0 8px 8px}
+#playLogList::-webkit-scrollbar{width:3px}
+#playLogList::-webkit-scrollbar-thumb{background:#c8b08a}
+.log-record{font-size:11px;color:#5a4630;padding:3px 0;border-bottom:1px dashed rgba(140,105,50,.45);position:relative;white-space:normal;overflow:visible;line-height:1.45;overflow-wrap:anywhere}
+.log-record.p{color:#2a5a8a}
+.log-record.m{color:#a03030}
+.log-card-name{position:relative;color:#7b3fb6;font-weight:bold;text-decoration:underline dotted;cursor:help}
+.log-card-name:hover::after{content:attr(data-tip);position:fixed;left:58px;top:80px;width:260px;max-height:220px;overflow:auto;padding:8px 10px;border-radius:7px;background:#0b1728;color:#f5e8b8;border:1px solid #d8ae55;box-shadow:0 5px 20px rgba(0,0,0,.55);white-space:normal;z-index:9999;font-weight:normal;text-decoration:none;pointer-events:none}
+.battle-talent-title{margin:9px 0 5px;color:#8ab4f8;font-size:12px}.battle-talent-title.enemy{color:#ff9a9a}.battle-talent-row{display:flex;flex-direction:column;gap:3px;background:#182a3c;border:1px solid #31506d;border-radius:7px;padding:7px 9px;margin-bottom:5px;font-size:11px}.battle-talent-row b{color:#ffd700}.battle-talent-row span{color:#b9cadd;line-height:1.45}.battle-talent-row.enemy{border-color:#743d46}.battle-talent-row.enemy b{color:#ff9a9a}.battle-talent-empty{font-size:10px;color:#71869c;padding:5px 0}
+.log-record-empty{font-size:10px;color:#8a6a3a;padding:4px 0}
+.stage-title{font-size:10px;color:#4a6a8a;text-align:center;letter-spacing:3px;flex-shrink:0;margin-top:6px}
+/* 战斗日志：左上角浮层（用户定 2026-08-16） */
+/* 左上角战斗日志浮层已移除（2026-08-18 用户：怪物生命上边的黑框） */
+#battlePanel{flex-shrink:0;background:#101d30;border-top:2px solid #204060;display:flex;gap:8px;padding:8px;justify-content:center}
+.bp-left{display:flex;flex-direction:column;width:150px;flex-shrink:0;gap:6px}
+/* 卡组/弃牌堆：插画铺满+底部标签（用户提供 卡牌插画/卡组.png、卡牌插画/弃牌堆.png，2026-08-16 导入） */
+.pile-zone{background:linear-gradient(180deg,#e3d2ae 0%,#f8f1e0 100%);border:2px solid rgba(140,105,50,.45);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;cursor:help;position:relative;transition:border-color 0.15s;overflow:hidden}
+.pile-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pile-zone .pile-label{position:absolute;bottom:0;left:0;right:0;text-align:center;background:rgba(13,25,42,.78);color:#ffd700;font-size:12px;font-weight:bold;padding:4px 0;margin:0;z-index:2}
+.pile-zone:hover{border-color:#c8963c}
+.pile-zone::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#3a2a14;color:#f8ead0;padding:5px 10px;border-radius:6px;font-size:11px;white-space:nowrap;z-index:60;border:1px solid #c8963c;pointer-events:none;display:none}
+.pile-zone:hover::after{display:block}
+/* 卡组/弃牌堆与手牌同尺寸（用户定 2026-08-16） */
+#discardZone{width:120px;height:185px;flex:none}
+#deckZone{width:120px;height:185px;flex-shrink:0;align-self:center}
+#attrCol{flex:1;display:flex;flex-direction:column;gap:4px;justify-content:center}
+.attr-line{background:#0d1f33;border:1px solid #1a3050;border-radius:6px;padding:4px 6px;font-size:11px;color:#a0b8d0;display:flex;justify-content:space-between;gap:4px;cursor:help;transition:border-color 0.15s}
+.attr-line b{color:#e0e8f0}
+.attr-line:hover{border-color:#ffd700;color:#ffd700}
+#portraitWrap{width:132px;flex-shrink:0;display:flex;flex-direction:column;gap:6px}
+#portraitBox{border:none;position:relative;background:transparent;overflow:visible;flex:0 0 auto} /* 2026-08-21：圆形生命水晶容器（.nexus），在 .player-mid 内居中，overflow 可见以露出右侧标签 */
+.portrait-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.portrait-ph{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative;overflow:hidden}
+.portrait-ph::before{content:'';position:absolute;top:0;left:-80%;width:60%;height:100%;background:linear-gradient(105deg,transparent,rgba(255,215,0,0.14),transparent);animation:portraitShine 3.2s infinite}
+@keyframes portraitShine{0%{left:-80%}55%,100%{left:130%}}
+.portrait-emoji{font-size:42px;animation:portraitFloat 2.6s ease-in-out infinite}
+@keyframes portraitFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.portrait-name{font-size:12px;font-weight:bold;color:#ffd700}
+.portrait-hint{font-size:9px;color:#4a6a8a}
+#skillRow{display:flex;flex-direction:column;gap:4px}
+#skillRow .skill-tooltip{display:block;width:100%;cursor:help}
+#skillRow .btn{font-size:10px;padding:5px 6px;width:100%;overflow:hidden;text-overflow:clip}
+.bp-right{flex:1;display:flex;gap:6px;min-width:0}
+.bp-right-inner{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+#statusRow{display:flex;flex-wrap:wrap;gap:3px;align-items:center;align-content:flex-start;font-size:10px;color:#a0b8d0;min-height:22px;max-height:70px;overflow-y:auto;flex-shrink:0}
+#statusRow::-webkit-scrollbar{width:3px}
+#statusRow::-webkit-scrollbar-thumb{background:#2a4a6a}
+.zone-label{font-size:9px;color:#4a6a8a;letter-spacing:1px;margin-right:2px}
+.util-badge{font-size:10px;background:rgba(26,42,68,.7);border:none;border-radius:8px;padding:2px 6px;cursor:help;white-space:nowrap;position:relative}
+.util-badge.tool-badge{border-color:#40c080;color:#80e0b0}
+.util-badge:hover{border-color:#ffd700}
+.util-badge::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#0a1628;color:#ffd700;padding:5px 10px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:60;border:1px solid #ffd700;pointer-events:none;display:none}
+.util-badge:hover::after{display:none}
+#vitalRow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex-shrink:0;border-top:1.5px dashed rgba(220,235,255,.3);padding-top:8px;margin-top:8px} /* 生命上方虚线（与怪物手牌下方虚线绕中心对称，用户定 2026-08-18） */
+.vital-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#a0b8d0;flex:1;min-width:150px}
+.vital-item .vital-label{white-space:nowrap}
+.energy-dot{width:12px;height:12px}
+/* 手牌行在玩家主列内（2026-08-21 用户需求：手牌区做小，出牌区做大） */
+#handRow{flex:none;display:flex;min-height:250px;padding-left:0}
+/* 手牌区给外框留空间（用户定 2026-08-18）：内边距=外框超出量，避免 overflow 裁掉外框 */
+#handArea{flex:1;display:flex;gap:0;overflow-x:auto;overflow-y:hidden;padding:66px 12px 10px 12px;align-items:flex-end;justify-content:center;min-width:0;scrollbar-width:none}
+#handArea .hand-card + .hand-card{margin-left:-24px} /* 扇形重叠（LoR 手牌堆叠感，2026-08-23） */
+
+/* ===== 生命水晶（LoR 风格，2026-08-21 用户需求）：圆形水晶放左右列中线对称（略小 84px），立绘移出水晶、在球下作半身立绘；扣血时残影环流动追落 ===== */
+.nexus{position:relative;width:84px;height:84px;border-radius:50%;flex:0 0 auto}
+.nexus .nexus-art{position:absolute;z-index:1;inset:2px;border-radius:50%;overflow:hidden;background:#07101d;box-shadow:inset 0 0 18px rgba(0,0,0,.9),0 0 8px rgba(255,255,255,.14)}
+.nexus .nexus-fill{position:absolute;left:0;right:0;bottom:0;height:100%;transition:height .72s cubic-bezier(.2,.72,.24,1);box-shadow:inset 0 7px 13px rgba(255,255,255,.18),inset 0 -10px 18px rgba(0,0,0,.28);will-change:height}
+.nexus .nexus-fill:before{content:'';position:absolute;z-index:2;left:-18%;right:-18%;top:-7px;height:15px;border-radius:48%;background:rgba(255,255,255,.68);box-shadow:0 4px 9px rgba(255,255,255,.2);opacity:.88;animation:nexusLiquidWave 1.35s ease-in-out infinite alternate}
+.nexus .nexus-fill:after{content:'';position:absolute;z-index:1;inset:8px 5px 4px;background:radial-gradient(circle at 22% 82%,rgba(255,255,255,.38) 0 2px,transparent 3px),radial-gradient(circle at 70% 66%,rgba(255,255,255,.3) 0 3px,transparent 4px),radial-gradient(circle at 47% 91%,rgba(255,255,255,.24) 0 1.5px,transparent 2.5px);background-repeat:no-repeat;animation:nexusLiquidBubbles 2.1s linear infinite}
+.nexus-player .nexus-fill{background:linear-gradient(180deg,#69e7ff 0%,#1597cf 45%,#07517f 100%)}
+.nexus-monster .nexus-fill{background:linear-gradient(180deg,#ff8b86 0%,#e83f4f 45%,#8a142b 100%)}
+.nexus .nexus-art:after{content:'';position:absolute;z-index:2;inset:0;border-radius:50%;background:radial-gradient(circle at 32% 24%,rgba(255,255,255,.48),transparent 43%),linear-gradient(90deg,rgba(255,255,255,.08),transparent 35%,rgba(0,0,0,.16));pointer-events:none} /* 球面高光 */
+.nexus .nexus-tab{position:absolute;left:calc(100% + 5px);top:50%;transform:translateY(-50%);background:rgba(13,25,42,.88);border:1.5px solid #39c5e8;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:bold;color:#cdeeff;white-space:nowrap;z-index:5;line-height:1.35;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+.nexus-monster .nexus-tab{border-color:#ff5a5a;color:#ffd9d9}
+.nexus .nexus-shield{position:absolute;top:-5px;right:-5px;background:#12365e;border:1.5px solid #6ab0ff;border-radius:10px;padding:2px 6px;font-size:11px;font-weight:bold;color:#cfe8ff;z-index:6;box-shadow:0 0 8px rgba(106,176,255,.45)}
+.nexus .nexus-shield,.et-energy{cursor:help}
+.monster-statuses{display:flex;flex-wrap:wrap;align-items:center;gap:2px;min-height:30px}
+@keyframes nexusLiquidWave{0%{transform:translateX(-4%) rotate(-2deg) scaleY(.72)}100%{transform:translateX(4%) rotate(2deg) scaleY(1.08)}}
+@keyframes nexusLiquidBubbles{0%{transform:translateY(12px);opacity:.25}35%{opacity:.75}100%{transform:translateY(-24px);opacity:0}}
+.nexus-player{animation:nexusGlowP 3.2s ease-in-out infinite}
+@keyframes nexusGlowP{0%,100%{box-shadow:0 0 14px rgba(57,197,232,.22)}50%{box-shadow:0 0 26px rgba(57,197,232,.5)}}
+.nexus-monster{animation:nexusGlowM 3.2s ease-in-out infinite}
+@keyframes nexusGlowM{0%,100%{box-shadow:0 0 14px rgba(255,90,90,.2)}50%{box-shadow:0 0 26px rgba(255,90,90,.45)}}
+.player-side .nexus,.monster-side .nexus{margin:0 auto} /* 双方水晶在各自 mid 容器内垂直居中，左右镜像对称 */
+/* 半身立绘（2026-08-21 用户需求）：生命水晶正下方，取景头+胸（半身），不放进球内 */
+.player-mid,.monster-mid{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.player-mid::before,.monster-mid::before{display:none}
+#portraitBox,#monsterPortraitBox{border:none;position:relative;background:transparent;overflow:visible;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.nexus-portrait{position:relative;width:100%;flex:1;min-height:120px;overflow:visible;border-radius:0;display:flex;align-items:flex-start;justify-content:center;isolation:isolate}
+.nexus-portrait .portrait-art{position:absolute;z-index:2;inset:0;width:100%;height:100%;object-fit:contain;object-position:50% 0;transform:none;transform-origin:50% 0;display:block} /* 普通完整立绘：顶部对齐，不裁切 */
+.nexus-portrait .portrait-art.portrait-huxiaomeng-ex{inset:0 auto 0 50%;width:auto;max-width:none;height:100%;transform:translateX(-50%);transform-origin:50% 50%;object-fit:contain} /* 按高度铺满，裁掉两侧多余透明留白 */
+.nexus-portrait .portrait-ph{width:100%;height:100%}
+.nexus-portrait .portrait-emoji{font-size:52px;animation:portraitFloat 2.6s ease-in-out infinite}
+.nexus-portrait .portrait-name{font-size:12px;font-weight:bold;color:#ffd700}
+.nexus-portrait .portrait-hint{font-size:9px;color:#4a6a8a}
+.nexus-portrait.monster{align-items:center}
+.nexus-portrait.monster .portrait-emoji{font-size:56px;text-shadow:0 0 18px rgba(200,120,255,.5)}
+
+/* ===== 结束回合区双体力面板（LoR 风格，2026-08-21 用户需求）：按钮上方=玩家体力，下方=怪物体力，显示当前/上限 ===== */
+.stage-right{flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 6px 4px}
+.et-energy{display:flex;flex-direction:column;align-items:center;gap:4px;background:rgba(13,25,42,.72);border:1.5px solid rgba(245,215,110,.32);border-radius:10px;padding:6px 7px;min-width:66px}
+.et-e-label{font-size:10px;color:#8a9ab0;letter-spacing:2px;white-space:nowrap}
+.et-e-gems{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:78px}
+.et-e-num{font-size:13px;font-weight:bold;color:#f5d76e;line-height:1}
+.et-energy .energy-dot{width:11px;height:11px}
+
+/* ===== 竖版大手牌卡面 =====
+   结构：顶部=名字(中)+类别(右上)+费用(左上)，中部=插画区，插画下=品质球，底部=效果 */
+/* 手牌扇形（LoR 风格，2026-08-23）：每张卡由渲染时内联设置 --fan-rot/--fan-y，transform 读变量成弧形排列；
+   悬停转正上浮放大（!important 覆盖变量 transform），z-index 提升盖过邻牌 */
+.hand-card{width:120px;height:185px;min-width:0;max-width:none;padding:0;display:flex;flex-direction:column;border-radius:10px;position:relative;
+  transform:rotate(var(--fan-rot,0deg)) translateY(var(--fan-y,0px));transform-origin:50% 100%;
+  transition:transform .22s cubic-bezier(.2,.75,.3,1.12),box-shadow .18s ease}
+.hand-card:hover{transform:rotate(0deg) translateY(-12px) !important;z-index:60;box-shadow:0 16px 32px rgba(0,0,0,.55),0 0 20px rgba(130,190,255,.28)}
+.hand-card .cost{position:absolute;top:6px;right:6px;left:auto;font-size:14px;padding:1px 8px;z-index:8}
+.hand-card .name{position:absolute;top:9px;left:0;right:0;text-align:center;font-size:14px;margin:0;padding:0 40px;white-space:nowrap;overflow:hidden;text-overflow:clip;z-index:2}
+.hand-card .type-badge{position:absolute;top:8px;left:6px;right:auto;margin:0;font-size:10px;padding:1px 6px;z-index:3}
+.card-item-stack{position:absolute;z-index:9;right:6px;top:38px;display:flex;flex-direction:column;align-items:center;gap:4px;overflow:visible;pointer-events:auto}
+.card-item-orb{display:flex;align-items:center;justify-content:center;width:27px;height:27px;min-width:27px;padding:0;border-radius:50%;border:2px solid #132238;background:#31465e;color:#fff;font-size:15px;line-height:1;box-shadow:0 2px 6px #0009;cursor:help;overflow:hidden}
+.card-item-orb.q-green{border-color:#5ed47d;background:radial-gradient(circle at 35% 30%,#73a985,#1c5230)}
+.card-item-orb.q-blue{border-color:#69b8ff;background:radial-gradient(circle at 35% 30%,#6a9dcc,#244d83)}
+.card-item-orb img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.card-item-global-tip{z-index:100005;max-width:300px}
+.shop-product-grid{display:grid;grid-template-columns:repeat(4,minmax(128px,1fr));gap:8px;max-height:68vh;overflow:auto;padding:2px}
+.shop-product{position:relative;min-width:0;padding:7px;border:1.5px solid #567;border-radius:9px;background:rgba(5,15,28,.78);display:flex;flex-direction:column;align-items:center;gap:5px}
+.shop-product-card{height:142px;display:flex;align-items:flex-start;justify-content:center}
+.shop-product .shop-mini-card{transform:scale(.72);transform-origin:50% 0;margin-bottom:-52px}
+.shop-product .shop-mini-card:hover{transform:scale(.72) translateY(-5px)!important}
+.shop-product-item{width:100%;display:flex;align-items:center;gap:5px;border:1px solid;border-radius:6px;padding:4px;font-size:15px}
+.shop-product-item div{min-width:0}.shop-product-item b{display:block;color:#fff;font-size:10px}.shop-product-item small{display:block;color:#9eb4ca;font-size:8px;line-height:1.25}
+.shop-product-quality{width:100%;display:flex;justify-content:space-between;font-size:8px}.shop-product>.btn{width:100%;padding:4px;font-size:10px}.shop-product>.btn del{color:#899;font-size:8px}.shop-product>.btn i{color:#f88;font-size:8px;font-style:normal}
+.shop-discount{position:absolute;z-index:20;top:3px;left:3px;padding:2px 5px;border-radius:5px;background:#d84b35;color:#fff3a0;font-size:8px;font-weight:bold}
+.flaw-ring{position:absolute;z-index:4;inset:0;pointer-events:none}.flaw-ring-svg{position:absolute;left:-22px;top:-22px;width:144px;height:144px;overflow:visible;filter:drop-shadow(0 0 8px rgba(255,255,255,.3))}.flaw-arc{fill:none;stroke-width:11;stroke-linecap:round;stroke-dasharray:72 242;animation:flawArcIn .22s ease-out}.flaw-arc-logic{stroke:#e34f61}.flaw-arc-idea{stroke:#4b9ee8}.flaw-arc-answer{stroke:#e4b63f}.flaw-arc-tool{stroke:#55bd78}.flaw-ring-label{position:absolute;z-index:7;display:flex;align-items:center;justify-content:center;min-width:30px;height:18px;padding:0 5px;border:1px solid #fff9;border-radius:9px;color:#fff;font-size:9px;font-weight:900;line-height:1;white-space:nowrap;pointer-events:auto;cursor:help;box-shadow:0 2px 6px #0009}.flaw-ring-label::after{content:attr(data-tip);position:absolute;z-index:90;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);display:none;width:max-content;max-width:260px;padding:5px 8px;border:1px solid #ffd776;border-radius:6px;background:#0a1628;color:#ffe6a6;font-size:9px;font-weight:normal;line-height:1.45;white-space:normal;box-shadow:0 5px 14px #000a;pointer-events:none}.flaw-ring-label:hover::after{display:block}.flaw-label-logic{left:3px;top:-30px;background:#a93645}.flaw-label-idea{right:-25px;top:-30px;background:#316fa5}.flaw-label-answer{right:-25px;bottom:-30px;background:#a47b24}.flaw-label-tool{left:3px;bottom:-30px;background:#398052}@keyframes flawArcIn{from{opacity:0;stroke-width:3}to{opacity:1;stroke-width:11}}
+.hand-card .card-art{flex:2;display:flex;align-items:center;justify-content:center;font-size:58px;border-radius:8px 8px 0 0;position:relative;overflow:hidden;z-index:1}
+.hand-card .card-art::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 32%,rgba(255,255,255,0.12),transparent 62%);pointer-events:none}
+.hand-card .card-art img.card-art-img{width:100%;height:100%;object-fit:cover}
+.hand-card.logic .card-art{background:linear-gradient(160deg,#3a1a24,#1a2a44)}
+.hand-card.idea .card-art{background:linear-gradient(160deg,#152c44,#15243a)}
+.hand-card.answer .card-art{background:linear-gradient(160deg,#3a3014,#1a2a44)}
+.hand-card.tool .card-art{background:linear-gradient(160deg,#14301e,#1a2a44)}
+.hand-card .q-orb-wrap{height:0;display:flex;justify-content:center;position:relative;z-index:2}
+.q-orb{width:26px;height:26px;border-radius:50%;margin-top:-26px;border:2px solid #0a1628;cursor:help;position:relative}
+.q-orb::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#0a1628;color:#ffd700;padding:4px 9px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:80;border:1px solid #ffd700;pointer-events:none;display:none}
+.q-orb:hover::after{display:block}
+.q-orb.q-green{background:radial-gradient(circle at 35% 30%,#a0f0b0,#208040);box-shadow:0 0 8px rgba(80,220,120,0.55)}
+.q-orb.q-white{background:radial-gradient(circle at 35% 30%,#ffffff,#8a98a8);box-shadow:0 0 8px rgba(220,230,240,0.45)}
+.q-orb.q-blue{background:radial-gradient(circle at 35% 30%,#a0d0ff,#3060c0);box-shadow:0 0 8px rgba(80,140,255,0.55)}
+.q-orb.q-purple{background:radial-gradient(circle at 35% 30%,#d0a0ff,#7040c0);box-shadow:0 0 8px rgba(160,100,255,0.55)}
+.q-orb.q-gold{background:radial-gradient(circle at 35% 30%,#ffe890,#c09020);box-shadow:0 0 8px rgba(255,200,80,0.6)}
+/* 文字区只占卡牌1/3（插画2/3），用户定 2026-08-16 */
+.hand-card .desc{flex:1;font-size:11px;line-height:1.4;padding:4px 6px;text-align:center;display:flex;align-items:center;justify-content:center;overflow:visible;position:relative;z-index:4}
+.hand-card .desc-content{display:block;width:100%;min-width:0;white-space:normal;word-break:normal;overflow-wrap:break-word}
+.hand-card:hover .desc{z-index:4}
+.hand-card .card-notes{font-size:10px;color:#8ab4f8;margin-top:3px}
+/* ==================== 暗号：金榜题名（2026-08-18 开发记录见 金榜题名-开发记录.md） ==================== */
+/* 小蕾专属卡外框：外框图环绕在卡牌周围（用户定 2026-08-18：只留外框，无背景/边框/内容）
+   顶部(-20%)/右侧(7.5%)/左侧(10.5%)；底部(-7%)；底部上移1%：-8% → -7%
+   层级：z-index:0 建立层叠上下文 → 外框(2) 在 红框(1) 之上，费用(3) 最上 */
+.card.hand-card.face-xiaolei{
+  background-color:transparent;
+  border:none;
+  border-radius:0;
+  z-index:0;
+}
+.card.hand-card.face-xiaolei::before{
+  content:'';
+  position:absolute;
+  z-index:20;
+  left:48.5%;
+  transform:translateX(-50%);
+  top:-20%;
+  bottom:-7%;
+  width:118%;
+  background:url('卡牌样式/小蕾卡牌外框.png') center/100% 100% no-repeat;
+  pointer-events:none;
+}
+/* 费用小圆：右上角小小个金色数字（用户定 2026-08-18，位置可调 top/right）
+   注意：必须 left:auto，否则 left:6px+right:7px 会把元素横向拉伸成大椭圆（已踩坑） */
+.card.hand-card.face-xiaolei .cost{
+  display:inline-block !important;
+  position:absolute !important;
+  top:7px !important;
+  right:7px !important;
+  left:auto !important;
+  min-width:20px !important;
+  height:20px !important;
+  line-height:20px !important;
+  padding:0 5px !important;
+  border-radius:50% !important;
+  background:rgba(10,22,40,.88) !important;
+  border:1px solid #ffd700 !important;
+  color:#ffd700 !important;
+  font-size:11px !important;
+  font-weight:bold !important;
+  text-align:center !important;
+  z-index:3 !important;
+}
+/* 外框卡隐藏内容：类别/品质球/数量 不显示（名字方框+插画区+效果区+费用小圆单独显示） */
+.card.hand-card.face-xiaolei .type-badge,
+.card.hand-card.face-xiaolei .q-orb-wrap,
+.card.hand-card.face-xiaolei .q-orb,
+.card.hand-card.face-xiaolei .face-count{display:none}
+/* 卡名小方框（用户定 2026-08-18）：手牌内部顶部居中米黄小方框填卡牌名，位置可调 top */
+.card.hand-card.face-xiaolei .name{
+  display:inline-block !important;
+  position:absolute !important;
+  top:0px !important;
+  left:50% !important;
+  right:auto !important;
+  transform:translateX(-50%);
+  max-width:120px !important;
+  background:#f8f1e0 !important;
+  border:1px solid rgba(140,105,50,.5) !important;
+  border-radius:4px !important;
+  color:#5a4630 !important;
+  font-size:11px !important;
+  font-weight:bold !important;
+  padding:1px 8px !important;
+  text-align:center !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:clip !important;
+  z-index:3 !important;
+}
+/* 卡面分区（用户定 2026-08-18）：上半=插画区(2/3)，下半=效果区(1/3)，虚线分隔；插画上缩1%、左缩0.5% */
+.card.hand-card.face-xiaolei .card-art{
+  flex:2;
+  background:transparent;
+  border-radius:0;
+  margin-top:1%;
+  margin-left:0.5%;
+}
+/* 效果区：米黄背景（用户定 2026-08-18），文字加深保证可读 */
+.card.hand-card.face-xiaolei .desc{
+  flex:1;
+  border-top:1.5px dashed rgba(140,105,50,.45);
+  background:#f8f1e0;
+  color:#5a4630;
+}
+/* 效果区按卡牌类型配色（用户定 2026-08-18）：逻辑=浅红、思路=浅蓝、解答=深黄、用具=浅绿 */
+.card.hand-card.face-xiaolei.logic .desc{background:#f8d4d4}
+.card.hand-card.face-xiaolei.idea .desc{background:#d8e8f8}
+.card.hand-card.face-xiaolei.answer .desc{background:#f2d06b}
+.card.hand-card.face-xiaolei.tool .desc{background:#d8f0dc}
+.card.hand-card.face-xiaolei .desc .card-notes{color:#8a6a3a}
+.card.hand-card.face-xiaolei .desc .fx-val{color:#a06010}
+/* 角色外框通用版：由卡牌所属角色自动匹配素材；新角色默认读取“卡牌样式/角色名卡牌外框.png”。 */
+.card.hand-card.face-character-frame{background-color:transparent!important;border:none!important;border-radius:0!important;z-index:0}
+.card.hand-card.face-character-frame::before{content:'';position:absolute;z-index:20;left:48.5%;transform:translateX(-50%);top:-20%;bottom:-7%;width:118%;background:var(--character-card-frame) center/100% 100% no-repeat;pointer-events:none}
+.card.hand-card.face-character-frame .cost{display:inline-block!important;position:absolute!important;top:7px!important;right:7px!important;left:auto!important;min-width:20px!important;height:20px!important;line-height:20px!important;padding:0 5px!important;border-radius:50%!important;background:rgba(10,22,40,.88)!important;border:1px solid #ffd700!important;color:#ffd700!important;font-size:11px!important;font-weight:bold!important;text-align:center!important;z-index:3!important}
+.card.hand-card.face-character-frame .type-badge,.card.hand-card.face-character-frame .q-orb-wrap,.card.hand-card.face-character-frame .q-orb,.card.hand-card.face-character-frame .face-count{display:none}
+.card.hand-card.face-character-frame .name{display:inline-block!important;position:absolute!important;top:0!important;left:50%!important;right:auto!important;transform:translateX(-50%);max-width:120px!important;background:#f8f1e0!important;border:1px solid rgba(140,105,50,.5)!important;border-radius:4px!important;color:#5a4630!important;font-size:11px!important;font-weight:bold!important;padding:1px 8px!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;z-index:3!important}
+.card.hand-card.face-character-frame .card-art{flex:2;background:transparent!important;border-radius:0;margin-top:1%;margin-left:.5%}
+.card.hand-card.face-character-frame .desc{flex:1;border-top:1.5px dashed rgba(140,105,50,.45);background:#f8f1e0!important;color:#5a4630!important;position:relative;z-index:4}
+.card.hand-card.face-character-frame.logic .desc{background:#f8d4d4!important}.card.hand-card.face-character-frame.idea .desc{background:#d8e8f8!important}.card.hand-card.face-character-frame.answer .desc{background:#f2d06b!important}.card.hand-card.face-character-frame.tool .desc{background:#d8f0dc!important}.card.hand-card.face-character-frame.trap .desc{background:#d9c8ea!important}
+.card.hand-card.face-character-frame .desc .card-notes{color:#8a6a3a}.card.hand-card.face-character-frame .desc .fx-val{color:#a06010}
+/* 怪物标准卡面：布局与小蕾专属卡一致，外框区域暂用米黄色双线占位。 */
+.card.hand-card.face-standard{background:#fbf1d8!important;border:0!important;border-radius:0;z-index:0;margin:12px 9px 10px}
+.card.hand-card.face-standard::before{content:'';position:absolute;z-index:20;left:50%;transform:translateX(-50%);top:-11px;bottom:-11px;width:calc(100% + 18px);border:3px solid #c9ad75;border-radius:10px;box-shadow:inset 0 0 0 2px #f6e6bd,0 0 0 2px #e4cc98;pointer-events:none}
+.card.hand-card.face-standard .cost{display:inline-block!important;position:absolute!important;top:7px!important;right:7px!important;left:auto!important;min-width:20px!important;height:20px!important;line-height:20px!important;padding:0 5px!important;border-radius:50%!important;background:#725327!important;border:1px solid #f1d88a!important;color:#fff1b5!important;font-size:11px!important;text-align:center!important;z-index:4!important}
+.card.hand-card.face-standard .type-badge,.card.hand-card.face-standard .q-orb-wrap,.card.hand-card.face-standard .q-orb{display:none}
+.card.hand-card.face-standard .name{display:inline-block!important;position:absolute!important;top:0!important;left:50%!important;right:auto!important;transform:translateX(-50%);max-width:calc(100% - 48px)!important;background:#f8f1e0!important;border:1px solid rgba(140,105,50,.5)!important;border-radius:4px!important;color:#5a4630!important;font-size:11px!important;padding:1px 8px!important;text-align:center!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;z-index:4!important}
+.card.hand-card.face-standard .card-art{flex:2;background:transparent!important;border-radius:0;margin-top:1%;margin-left:.5%}.card.hand-card.face-standard .desc{flex:1;border-top:1.5px dashed rgba(140,105,50,.45);position:relative;z-index:3}
+/* 数值悬停显示倍数公式 */
+.fx-val{color:#ffd700;font-weight:bold;cursor:help;position:relative;border-bottom:1px dotted rgba(255,215,0,0.5)}
+.fx-val::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#0a1628;color:#ffd700;padding:5px 10px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:80;border:1px solid #ffd700;pointer-events:none;display:none;font-weight:normal}
+.fx-val:hover::after{display:block}
+/* 拖拽发牌：中间出牌区（用户定 2026-08-18）——默认隐藏，拖拽/点击提示时显现；松手在区内才打出 */
+#playZone{position:absolute;left:8%;right:96px;top:24%;height:40%;z-index:2;display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(200,225,255,.3);border-radius:12px;background:rgba(13,31,51,.28);opacity:0;pointer-events:none;transition:opacity .15s}
+#playZoneLabel{font-size:13px;color:#9ab8d8;letter-spacing:4px}
+#battleStage.drag-active #playZone{opacity:1;pointer-events:auto}
+#playZone.hint{opacity:1}
+#playZone.drop-active{border-color:#ffd700;background:rgba(255,215,0,.1);box-shadow:inset 0 0 24px rgba(255,215,0,.15)}
+#playZone.drop-active #playZoneLabel{color:#ffd700}
+/* 怪物出牌动作（用户定 2026-08-18）：卡从怪物手牌飞入中间出牌区，短暂展示后淡出；出牌区短暂显现 */
+.monster-fly{position:fixed;z-index:150;pointer-events:none;opacity:.95;transition:left .45s ease-in-out,top .45s ease-in-out,opacity .35s ease}
+.monster-fly .mhand-big .q-orb-wrap{display:none}
+.monster-fly.fade{opacity:0}
+#playZone.monster-fx{opacity:1}
+#playZone.monster-fx #playZoneLabel{color:#c8a0f0}
+/* 怪物出牌翻牌（任务7）：背面飞入→rotateY 翻转为正面→停留→淡出 */
+.monster-fly .flip-inner{position:relative;width:120px;height:185px;transform-style:preserve-3d;transition:transform .25s ease}
+.monster-fly .flip-back,.monster-fly .flip-front{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.monster-fly .flip-back{transform:rotateY(0deg)}
+.monster-fly .flip-front{transform:rotateY(180deg)}
+.monster-fly.flipped .flip-inner{transform:rotateY(180deg)}
+.monster-fly .flip-front .card,.monster-fly .flip-back{width:120px;height:185px}
+.monster-fly .flip-back::after{font-size:54px}
+/* 统一特效层（任务0）：覆盖战斗区，不拦截点击 */
+#fxLayer{position:absolute;inset:0;pointer-events:none;z-index:120;overflow:hidden}
+.fx-num{position:fixed;z-index:160;pointer-events:none;font-weight:900;font-size:34px;transform:translate(-50%,-50%);animation:fxNum 1s ease-out forwards;
+  text-shadow:0 0 3px rgba(0,0,0,.9),0 2px 4px rgba(0,0,0,.85),0 0 14px rgba(0,0,0,.45)}
+/* 重击数字（2026-08-23）：大伤害更大更红，砸落弹跳感 */
+.fx-num.crit{font-size:46px;color:#ff4040;text-shadow:0 0 4px #fff,0 0 16px rgba(255,60,60,.75),0 3px 0 rgba(80,0,0,.85);animation:fxNumCrit 1.05s ease-out forwards}
+@keyframes fxNumCrit{0%{opacity:0;transform:translate(-50%,-26%) scale(2.2)}16%{opacity:1;transform:translate(-50%,-42%) scale(.96)}30%{transform:translate(-50%,-50%) scale(1.06)}100%{opacity:0;transform:translate(-50%,-175%) scale(1.12)}}
+.fx-num.dmg{color:#ff5a5a}
+.fx-num.shield{color:#7ec8ff}
+.fx-num.true{color:#ff9b3d}
+@keyframes fxNum{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}15%{opacity:1}100%{opacity:0;transform:translate(-50%,-160%) scale(1.1)}}
+.fx-hit{animation:fxHit .4s ease}
+@keyframes fxHit{0%,100%{filter:none;transform:none}20%{filter:brightness(1.6) drop-shadow(0 0 6px #ff5a5a);transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.fx-shield{animation:fxShield .6s ease}
+@keyframes fxShield{0%{box-shadow:0 0 0 0 rgba(126,200,255,0)}30%{box-shadow:0 0 0 6px rgba(126,200,255,.7),inset 0 0 18px rgba(126,200,255,.6)}100%{box-shadow:0 0 0 0 rgba(126,200,255,0)}}
+.fx-shield.green{animation:fxShieldGreen .6s ease}
+@keyframes fxShieldGreen{0%{box-shadow:0 0 0 0 rgba(80,240,120,0)}30%{box-shadow:0 0 0 8px rgba(80,240,120,.7),inset 0 0 20px rgba(80,240,120,.6)}100%{box-shadow:0 0 0 0 rgba(80,240,120,0)}}
+.fx-burst{position:fixed;z-index:160;pointer-events:none;border-radius:50%;transform:translate(-50%,-50%);animation:fxBurst .7s ease-out forwards}
+@keyframes fxBurst{0%{opacity:.9;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}}
+.fx-burst.skill{background:radial-gradient(circle,rgba(255,215,0,.55),transparent 70%)}
+.fx-burst.skill-partner{background:radial-gradient(circle,rgba(200,160,240,.55),transparent 70%)}
+.fx-burst.answer{background:radial-gradient(circle,rgba(255,233,168,.6),transparent 70%)}
+/* 光环增强（2026-08-23）：burst 附带一圈白色扩散描边环 */
+.fx-burst::after{content:'';position:absolute;inset:-6%;border-radius:50%;border:2.5px solid rgba(255,255,255,.8);box-shadow:0 0 14px rgba(255,255,255,.5);animation:fxBurstRing .7s ease-out forwards}
+@keyframes fxBurstRing{0%{opacity:0;transform:scale(.35)}28%{opacity:1}100%{opacity:0;transform:scale(1.75)}}
+/* 基础攻击特效：屏幕剧烈抖动（挂到 #app 持久元素——render 重建战斗DOM时不会被冲掉，2026-08-19 修复） */
+@keyframes screenShake{0%,100%{transform:translate(0,0) rotate(0deg)}12%{transform:translate(-12px,8px) rotate(-.6deg)}26%{transform:translate(11px,-9px) rotate(.55deg)}40%{transform:translate(-9px,7px) rotate(-.45deg)}54%{transform:translate(8px,-6px) rotate(.35deg)}68%{transform:translate(-6px,5px) rotate(-.25deg)}82%{transform:translate(4px,-3px) rotate(.15deg)}}
+#app.shake,.lz-bg.shake{animation:screenShake .5s cubic-bezier(.36,.07,.19,.97) both}
+/* 龙族专属强震：幅度更大、次数更多，普通攻击只抖一次时龙族抖得更猛（2026-08-22） */
+@keyframes dragonShake{0%,100%{transform:translate(0,0) rotate(0)}10%{transform:translate(-24px,14px) rotate(-1.2deg)}22%{transform:translate(22px,-18px) rotate(1.1deg)}34%{transform:translate(-18px,14px) rotate(-.9deg)}46%{transform:translate(16px,-12px) rotate(.75deg)}58%{transform:translate(-13px,10px) rotate(-.6deg)}70%{transform:translate(10px,-8px) rotate(.45deg)}82%{transform:translate(-6px,5px) rotate(-.25deg)}90%{transform:translate(3px,-2px) rotate(.1deg)}}
+#app.shake-big,.lz-bg.shake-big{animation:dragonShake .8s cubic-bezier(.3,.05,.2,1) both}
+/* 出牌被拒抖动（小说互斥等）：短暂左右抖，牌收回手中 */
+@keyframes denyShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
+.card-deny{animation:denyShake .26s ease-in-out both !important}
+/* 被攻击：全屏闪红 */
+.fx-redflash{position:fixed;inset:0;z-index:200;pointer-events:none;background:radial-gradient(circle at 50% 55%,rgba(255,40,40,0) 28%,rgba(220,20,20,.5) 100%);animation:redFlash .46s ease-out forwards}
+@keyframes redFlash{0%{opacity:0}18%{opacity:.85}100%{opacity:0}}
+/* 基础攻击挥砍动画 */
+.fx-slash{position:fixed;z-index:170;pointer-events:none;height:24px;border-radius:12px;border:3px solid rgba(0,0,0,.55);background:linear-gradient(90deg,transparent,#fff 20%,#e8f4ff 50%,#fff 80%,transparent);box-shadow:0 0 18px 6px rgba(255,255,255,.95),0 0 34px 14px rgba(120,200,255,.55);filter:drop-shadow(0 0 4px rgba(0,0,0,.6));transform:translate(-50%,-50%) rotate(-32deg);transform-origin:center;animation:slash .4s ease-out forwards}
+@keyframes slash{0%{opacity:0;transform:translate(-50%,-50%) rotate(-32deg) scaleX(.12)}25%{opacity:1}60%{opacity:1;transform:translate(-50%,-50%) rotate(-32deg) scaleX(1)}100%{opacity:0;transform:translate(-50%,-50%) rotate(-32deg) scaleX(1.25)}}
+/* 龙族刀光特效（2026-08-22）：全屏黑遮 + 随机红色刀光斜划 + 每刀屏幕抖动 */
+.fx-dragon-black{position:fixed;inset:0;z-index:190;pointer-events:none;background:#000;animation:dragonBlack .5s ease-out forwards}
+@keyframes dragonBlack{0%{opacity:0}25%{opacity:.55}100%{opacity:0}}
+.fx-dragon-slash{position:fixed;z-index:200;pointer-events:none;height:10px;border-radius:6px;border:3px solid rgba(120,0,0,.85);background:linear-gradient(90deg,transparent,#ff2a2a 30%,#fff 50%,#ff2a2a 70%,transparent);box-shadow:0 0 20px 8px rgba(255,40,40,.9),0 0 40px 18px rgba(200,0,0,.5);filter:drop-shadow(0 2px 4px rgba(0,0,0,.7));transform-origin:center;animation:dragonSlash .34s ease-out forwards}
+@keyframes dragonSlash{0%{opacity:0;transform:translate(-50%,-50%) rotate(var(--dr-rot)) scaleX(.1)}25%{opacity:1}70%{opacity:1;transform:translate(-50%,-50%) rotate(var(--dr-rot)) scaleX(1)}100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--dr-rot)) scaleX(1.3)}}
+/* 剧烈爆炸特效：居中定位容器=光核 + 冲击光环 + 火花四射（用户定 2026-08-19 基础攻击动画） */
+.fx-explosion{position:fixed;z-index:170;pointer-events:none;transform:translate(-50%,-50%);transform-origin:center}
+/* 爆炸光核：星芒+亮核，快速爆开淡出 */
+.fx-explosion .ex-core{position:absolute;inset:0;border-radius:50%;transform-origin:center;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(255,255,255,1) 0%,rgba(255,240,150,.98) 16%,rgba(255,170,60,.92) 34%,rgba(255,120,30,.55) 52%,rgba(255,80,20,0) 68%),
+    conic-gradient(from 0deg,
+      rgba(255,225,90,0) 0% 6%,rgba(255,225,90,1) 6% 18%,rgba(255,225,90,0) 18% 24%,
+      rgba(255,225,90,1) 24% 36%,rgba(255,225,90,0) 36% 42%,
+      rgba(255,225,90,1) 42% 54%,rgba(255,225,90,0) 54% 60%,
+      rgba(255,225,90,1) 60% 72%,rgba(255,225,90,0) 72% 78%,rgba(255,225,90,1) 78% 90%,rgba(255,225,90,0) 90% 96%);
+  box-shadow:0 0 30px 14px rgba(255,190,70,.7),0 0 70px 30px rgba(255,120,30,.4);
+  animation:exCore .55s ease-out forwards}
+@keyframes exCore{0%{opacity:0;transform:scale(.05) rotate(0deg)}10%{opacity:1}50%{opacity:1;transform:scale(1.08) rotate(12deg)}100%{opacity:0;transform:scale(1.4) rotate(28deg)}}
+/* 冲击光环：一圈朝外急速扩散、放淡的圆环 */
+.fx-explosion .ex-ring{position:absolute;inset:-12%;border-radius:50%;transform-origin:center;
+  border:4px solid rgba(255,220,140,.9);
+  box-shadow:0 0 24px 6px rgba(255,180,80,.55),inset 0 0 18px rgba(255,190,90,.4);
+  animation:exRing .55s ease-out forwards}
+@keyframes exRing{0%{transform:scale(.25);opacity:1;border-width:4px}40%{opacity:.85}100%{transform:scale(1.9);opacity:0;border-width:1.5px}}
+/* 火花：从中心沿 --ex-x/--ex-y 方向飞散、缩小并消失的小粒子 */
+.fx-explosion .ex-spark{position:absolute;left:50%;top:50%;width:9px;height:9px;border-radius:50%;
+  background:#ffd24a;box-shadow:0 0 10px 2px rgba(255,190,60,.8);
+  --ex-x:0px;--ex-y:0px;
+  transform:translate(-50%,-50%);
+  animation:exSpark .5s ease-out forwards}
+@keyframes exSpark{0%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(calc(-50% + var(--ex-x)),calc(-50% + var(--ex-y))) scale(.2);opacity:0}}
+/* ===== 战斗手感动画套件（2026-08-19）===== */
+/* 飘字：治疗绿 */
+.fx-num.heal{color:#7ee68a}
+/* 新抽的牌：从下方滑入浮现（区分新旧牌，render 重建时只给新牌挂类避免全手牌重播） */
+@keyframes cardDrawIn{0%{opacity:0;transform:rotate(var(--fan-rot,0deg)) translateY(calc(var(--fan-y,0px) + 36px)) scale(.92)}100%{opacity:1;transform:rotate(var(--fan-rot,0deg)) translateY(var(--fan-y,0px))}}
+.card-new{animation:cardDrawIn .42s cubic-bezier(.2,.8,.3,1) backwards}
+#handArea .card-new:nth-child(n+2){animation-delay:55ms}
+#handArea .card-new:nth-child(n+3){animation-delay:110ms}
+#handArea .card-new:nth-child(n+4){animation-delay:165ms}
+#monsterHandRow .card-new:nth-child(n+3){animation-delay:55ms}
+#monsterHandRow .card-new:nth-child(n+4){animation-delay:110ms}
+/* 抽牌演出：卡牌从右下牌库腾空展示，再带流光拖尾重重落入手牌。 */
+.fx-draw-card{position:fixed!important;z-index:310!important;pointer-events:none!important;margin:0!important;transform-origin:50% 50%;animation:fxDrawJourney 1.34s cubic-bezier(.18,.72,.2,1) forwards;filter:drop-shadow(0 10px 16px rgba(5,16,32,.52));will-change:transform,opacity}
+.fx-draw-card::after{content:'';position:absolute;z-index:-1;right:58%;top:38%;width:180px;height:26px;border-radius:50%;background:linear-gradient(90deg,transparent,rgba(130,220,255,.05) 14%,rgba(235,251,255,.95) 72%,rgba(255,255,255,.8));filter:blur(5px);transform:rotate(-12deg);transform-origin:right center;animation:fxDrawTail 1.34s ease-out forwards}
+@keyframes fxDrawJourney{0%{opacity:0;transform:translate(0,0) rotate(var(--draw-rot)) scale(.5)}10%{opacity:1}45%{opacity:1;transform:translate(var(--show-x),var(--show-y)) rotate(0deg) scale(1.58)}61%{opacity:1;transform:translate(var(--show-x),var(--show-y)) rotate(0deg) scale(1.66)}87%{opacity:1;transform:translate(var(--end-x),var(--end-y)) rotate(0deg) scale(1.13)}100%{opacity:0;transform:translate(var(--end-x),var(--end-y)) rotate(0deg) scale(1)}}
+@keyframes fxDrawTail{0%,10%{opacity:0;transform:rotate(-12deg) scaleX(.15)}24%,55%{opacity:1;transform:rotate(-12deg) scaleX(1)}78%{opacity:.55;transform:rotate(-12deg) scaleX(.48)}100%{opacity:0;transform:rotate(-12deg) scaleX(.08)}}
+.fx-draw-trail{position:fixed;z-index:305;pointer-events:none;height:7px;border-radius:999px;transform-origin:left center;background:linear-gradient(90deg,rgba(100,205,255,.02),rgba(159,226,255,.35),rgba(255,255,255,.98));filter:blur(1.5px) drop-shadow(0 0 8px rgba(126,219,255,.9));animation:fxDrawTrail .66s ease-out forwards}
+@keyframes fxDrawTrail{0%{opacity:0;clip-path:inset(0 100% 0 0)}20%{opacity:1;clip-path:inset(0 15% 0 0)}100%{opacity:0;clip-path:inset(0 0 0 88%)}}
+.draw-arrival-hidden{visibility:hidden!important}.draw-arrived{animation:fxDrawLand .28s cubic-bezier(.2,.8,.35,1.35)}@keyframes fxDrawLand{0%{filter:brightness(2.2) drop-shadow(0 0 16px #c9f5ff)}55%{filter:brightness(1.45) drop-shadow(0 0 9px #7fdcff)}100%{filter:none}}
+/* 攻击命中追加一道冲击星芒和扩散震波，让打击点更明确。 */
+.fx-impact{position:fixed;z-index:175;pointer-events:none;width:180px;height:180px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,1) 0 4%,rgba(255,231,139,.92) 9%,rgba(255,144,54,.55) 22%,transparent 56%);mix-blend-mode:screen;animation:fxImpact .58s cubic-bezier(.15,.7,.3,1) forwards}
+.fx-impact::before,.fx-impact::after{content:'';position:absolute;inset:-15%;border-radius:50%;border:3px solid rgba(255,223,134,.95);box-shadow:0 0 20px rgba(255,164,62,.8);animation:fxImpactRing .58s ease-out forwards}.fx-impact::after{inset:8%;border-color:rgba(255,255,255,.82);animation-delay:.06s}.fx-impact.crit{width:235px;height:235px;filter:saturate(1.35)}
+@keyframes fxImpact{0%{opacity:0;transform:translate(-50%,-50%) scale(.18) rotate(0)}16%{opacity:1}58%{opacity:.92;transform:translate(-50%,-50%) scale(1.1) rotate(18deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.55) rotate(42deg)}}@keyframes fxImpactRing{0%{opacity:1;transform:scale(.18)}100%{opacity:0;transform:scale(1.45)}}
+/* 出牌飞行动画：克隆牌飞向出牌区中心并缩小淡出 */
+.fx-flyout{position:fixed;z-index:185;pointer-events:none;margin:0;
+  transition:left .34s cubic-bezier(.3,.7,.35,1),top .34s cubic-bezier(.3,.7,.35,1),transform .34s cubic-bezier(.3,.7,.35,1),opacity .26s ease .08s}
+/* 拖拽取消：残影快速回缩淡出（松手在出牌区外时） */
+.drag-ghost.gone{opacity:0;transform:translate(-50%,-60%) scale(.88) rotate(-2deg);transition:opacity .17s ease,transform .17s ease}
+/* 回合横幅：回合切换时中央大字提示 */
+.fx-turn-banner{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:190;pointer-events:none;
+  font-size:34px;font-weight:900;letter-spacing:10px;color:#fff;white-space:nowrap;padding:12px 44px;
+  text-shadow:0 2px 12px rgba(0,0,0,.75),0 0 26px rgba(255,215,0,.4);
+  animation:turnBanner 1.05s ease forwards}
+/* 横幅增强（2026-08-23 LoR 风格）：暗色斜切横带 + 一道扫光划过 */
+.fx-turn-banner::before{content:'';position:absolute;inset:6px -14px;z-index:-1;transform:skewX(-14deg);
+  background:linear-gradient(90deg,transparent,rgba(8,14,26,.88) 16%,rgba(8,14,26,.88) 84%,transparent);
+  border-top:1.5px solid rgba(255,215,0,.4);border-bottom:1.5px solid rgba(255,215,0,.4)}
+.fx-turn-banner::after{content:'';position:absolute;inset:6px -14px;z-index:-1;transform:translateX(-130%) skewX(-14deg);
+  background:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.55) 50%,transparent 66%);
+  animation:tbShine .85s ease .1s forwards}
+@keyframes tbShine{to{transform:translateX(130%) skewX(-14deg)}}
+.fx-turn-banner.enemy{color:#ff8d8d;text-shadow:0 2px 12px rgba(0,0,0,.75),0 0 26px rgba(255,80,80,.45)}
+.fx-turn-banner.start{color:#ffd76a;text-shadow:0 2px 12px rgba(0,0,0,.75),0 0 26px rgba(255,200,80,.5)}
+@keyframes turnBanner{0%{opacity:0;transform:translate(-50%,-50%) scale(1.4)}16%{opacity:1;transform:translate(-50%,-50%) scale(1)}72%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.95)}}
+/* 拖拽悬停出牌区：呼吸脉冲提示 */
+#playZone.drop-active{animation:zonePulse .8s ease-in-out infinite}
+@keyframes zonePulse{0%,100%{box-shadow:inset 0 0 16px rgba(255,215,0,.12)}50%{box-shadow:inset 0 0 34px rgba(255,215,0,.3)}}
+/* 结束回合按钮按下反馈 */
+#endTurnBtn:active:not(:disabled){transform:scale(.93);filter:brightness(1.25)}
+/* 结束回合：圆形按钮，位于出牌区最右侧（用户定 2026-08-16）；列布局见上方 .stage-right（2026-08-21 双体力面板） */
+#endTurnBtn{width:76px;height:76px;border-radius:50%;background:rgba(13,25,42,.85);border:3px solid #ffd700;color:#ffd700;font-size:12px;font-weight:bold;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1.25;transition:all .15s;flex:none;padding:0}
+#endTurnBtn .eb-icon{font-size:20px}
+#endTurnBtn:hover:not(:disabled){background:#1a2a44;transform:scale(1.06);box-shadow:0 0 14px rgba(255,215,0,.45)}
+/* ===== LoR 风格战斗增强（2026-08-23）：光柱/撞击环/击杀/胜利光雨/氛围微尘/能量脉动 ===== */
+/* 出牌光柱：卡飞入出牌区瞬间冲天的淡蓝光柱 */
+.fx-pillar{position:fixed;z-index:150;pointer-events:none;width:110px;height:70vh;transform:translate(-50%,0);
+  background:linear-gradient(to top,rgba(150,215,255,.75),rgba(170,225,255,.28) 48%,transparent 88%);
+  border-radius:46% 46% 0 0/30% 30% 0 0;filter:blur(5px);mix-blend-mode:screen;animation:pillarUp .6s ease-out forwards}
+@keyframes pillarUp{0%{opacity:0;transform:translate(-50%,80px) scaleY(.25)}22%{opacity:.95}100%{opacity:0;transform:translate(-50%,-30px) scaleY(1)}}
+/* 命中撞击环：命中点金色冲击环扩散（.red=玩家受击红色） */
+.fx-ring{position:fixed;z-index:168;pointer-events:none;width:36px;height:36px;border-radius:50%;
+  border:3px solid rgba(255,215,120,.95);box-shadow:0 0 16px rgba(255,190,80,.75),inset 0 0 10px rgba(255,220,140,.55);
+  transform:translate(-50%,-50%);animation:ringPop .5s ease-out forwards}
+.fx-ring.red{border-color:rgba(255,120,120,.95);box-shadow:0 0 16px rgba(255,80,80,.75),inset 0 0 10px rgba(255,120,120,.5)}
+@keyframes ringPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.25)}30%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(3)}}
+/* 击杀白闪 + 碎片飞散 */
+.fx-kill{position:fixed;inset:0;z-index:195;pointer-events:none;mix-blend-mode:screen;
+  background:radial-gradient(circle at 50% 42%,rgba(255,255,255,.92),rgba(255,236,170,.35) 40%,transparent 72%);
+  animation:killFlash .55s ease-out forwards}
+@keyframes killFlash{0%{opacity:0}15%{opacity:1}100%{opacity:0}}
+.fx-shard{position:fixed;z-index:196;pointer-events:none;width:9px;height:13px;
+  background:linear-gradient(#fff,#ffd76a);box-shadow:0 0 8px rgba(255,220,120,.9);
+  clip-path:polygon(50% 0,100% 60%,50% 100%,0 60%);transform:translate(-50%,-50%);animation:shardFly .7s ease-out forwards}
+@keyframes shardFly{0%{opacity:1;transform:translate(-50%,-50%) rotate(0) scale(1)}100%{opacity:0;transform:translate(calc(-50% + var(--sx,0px)),calc(-50% + var(--sy,0px))) rotate(var(--srot,180deg)) scale(.3)}}
+/* 胜利金光雨：结算前从底部升起的光点 */
+.fx-vp{position:fixed;bottom:0;z-index:180;pointer-events:none;width:6px;height:6px;border-radius:50%;
+  background:radial-gradient(circle,#fff,rgba(255,215,110,.9) 45%,transparent 75%);
+  box-shadow:0 0 12px 3px rgba(255,200,90,.55);animation:vpRise 1.6s ease-out forwards}
+@keyframes vpRise{0%{opacity:0;transform:translate(-50%,10px) scale(.6)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-46vh) scale(1.05)}}
+/* 战斗氛围微尘：常驻几粒缓慢上浮的光尘（fx.ambientBattleSync 挂/清，纯CSS无JS轮询不耗性能） */
+.fx-bt-ambient{position:fixed;inset:0;pointer-events:none;z-index:4;overflow:hidden}
+.fx-bt-ambient i{position:absolute;bottom:-3vh;border-radius:50%;background:radial-gradient(circle,rgba(190,225,255,.85),transparent 70%);
+  filter:blur(.4px);animation:ambFloat linear infinite}
+@keyframes ambFloat{0%{transform:translateY(0);opacity:0}12%{opacity:.7}88%{opacity:.45}100%{transform:translateY(-104vh);opacity:0}}
+/* 能量面板微光脉动（LoR 法力水晶感） */
+.et-energy{animation:etGlow 2.6s ease-in-out infinite}
+@keyframes etGlow{0%,100%{box-shadow:0 0 6px rgba(120,200,255,.12)}50%{box-shadow:0 0 18px rgba(120,200,255,.32)}}
+/* ===== seedream 贴图特效（2026-08-23）：黑底原图经 _cutout_black.ps1 抠成真透明 PNG，普通 alpha 混合，无黑边 ===== */
+/* 出牌区常驻法阵：拖牌悬停出牌区时随 playZone 渐显，缓慢旋转 */
+#playZone .pz-circle{position:absolute;left:50%;top:50%;width:min(96%,440px);aspect-ratio:1;transform:translate(-50%,-50%);
+  background:url('其他插画/magic_circle.png') center/contain no-repeat;
+  opacity:.42;filter:saturate(1.15);pointer-events:none;animation:circleSpin 70s linear infinite}
+@keyframes circleSpin{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+/* 出牌瞬间法阵闪亮（一次性，fx.circleFlash 创建） */
+.fx-circle-flash{position:fixed;z-index:151;pointer-events:none;width:min(42vh,340px);aspect-ratio:1;
+  background:url('其他插画/magic_circle.png') center/contain no-repeat;
+  filter:saturate(1.2) brightness(1.1);transform:translate(-50%,-50%);animation:circleFlash .85s ease-out forwards}
+@keyframes circleFlash{0%{opacity:0;transform:translate(-50%,-50%) scale(.42) rotate(0deg)}22%{opacity:.95}100%{opacity:0;transform:translate(-50%,-50%) scale(1.14) rotate(28deg)}}
+/* 暴击星芒光斑（一次性，fx.flare 创建） */
+.fx-flare{position:fixed;z-index:172;pointer-events:none;width:min(34vh,260px);aspect-ratio:1;
+  background:url('其他插画/crit_flare.png') center/contain no-repeat;
+  transform:translate(-50%,-50%);animation:flarePop .6s ease-out forwards}
+@keyframes flarePop{0%{opacity:0;transform:translate(-50%,-50%) scale(.25) rotate(-16deg)}16%{opacity:1}55%{opacity:.9}100%{opacity:0;transform:translate(-50%,-50%) scale(1.55) rotate(10deg)}}
+/* ===== 薛诗蕾线特效（2026-08-24）：seedream 黑底贴图经 _cutout_black.ps1 抠成透明 PNG ===== */
+/* 理性光环：玩家立绘处圆规几何光环展开 */
+.fx-rat-ring{position:fixed;z-index:171;pointer-events:none;width:150px;height:150px;border-radius:50%;
+  border:2.5px solid rgba(120,200,255,.85);box-shadow:0 0 22px rgba(90,170,255,.65),inset 0 0 26px rgba(90,170,255,.35);
+  transform:translate(-50%,-50%);animation:ratRing .85s ease-out forwards}
+@keyframes ratRing{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}25%{opacity:.95}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
+/* 公式粒子：发光数学符号上浮淡出 */
+.fx-formula{position:fixed;z-index:171;pointer-events:none;background:center/contain no-repeat;
+  filter:saturate(1.25) brightness(1.15);animation:formulaFloat 1.1s ease-out forwards}
+@keyframes formulaFloat{0%{opacity:0;transform:translateY(6px) scale(.6)}22%{opacity:.95}100%{opacity:0;transform:translateY(-56px) scale(1.12) rotate(9deg)}}
+/* 奥数之王：全屏红金闪 + 皇冠光芒 + 碎金光点 */
+.fx-king-flash{position:fixed;inset:0;z-index:192;pointer-events:none;
+  background:radial-gradient(circle at 50% 72%,rgba(255,140,60,.34),rgba(255,60,40,.16) 42%,transparent 68%);
+  animation:kingFlash .65s ease-out forwards}
+@keyframes kingFlash{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
+.fx-crown{position:fixed;z-index:193;pointer-events:none;width:min(40vh,300px);aspect-ratio:1;
+  background:center/contain no-repeat;filter:saturate(1.25);
+  transform:translate(-50%,-50%);animation:crownBurst 1.05s cubic-bezier(.2,1.3,.4,1) forwards}
+@keyframes crownBurst{0%{opacity:0;transform:translate(-50%,-50%) scale(.22) rotate(-14deg)}20%{opacity:1}62%{opacity:.92}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5) rotate(8deg)}}
+.fx-king-spark{position:fixed;z-index:194;pointer-events:none;width:7px;height:7px;border-radius:50%;
+  background:radial-gradient(circle,#ffe890 0%,#ff9a3c 65%,transparent 100%);
+  box-shadow:0 0 8px rgba(255,170,70,.9);animation:kingSpark .8s ease-out forwards}
+@keyframes kingSpark{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--sx,60px),var(--sy,-70px)) scale(.3)}}
+/* 手牌区费用改变脉冲 */
+#handArea.cost-pulse{animation:handCostPulse .55s ease}
+@keyframes handCostPulse{0%{filter:brightness(1)}30%{filter:brightness(1.5) drop-shadow(0 0 14px rgba(255,220,120,.8))}100%{filter:brightness(1)}}
+/* 已变更徽标：卡牌右上角橙色标签 + 卡面微光 */
+.changed-badge{position:absolute;top:24px;right:-4px;z-index:5;font-size:9px;font-weight:bold;
+  padding:2px 6px;border-radius:8px;color:#fff;background:linear-gradient(135deg,#ff9a3c,#ff5a3c);
+  box-shadow:0 0 8px rgba(255,120,60,.8);transform:rotate(6deg);pointer-events:none}
+.card.cost-changed{box-shadow:0 0 12px rgba(255,150,70,.55),0 4px 12px rgba(0,0,0,.45)}
+.card.cost-changed .cost{color:#ffb060;text-shadow:0 0 6px rgba(255,150,70,.9)}
+/* 压轴就绪：手牌只剩压轴一笔时金光呼吸 */
+/* 条件达成亮红光（2026-09-09）：压轴、刷题2费、苏醒加成、破绽击破等统一红光 */
+.card.cond-red{animation:condRedGlow 1.1s ease-in-out infinite}
+@keyframes condRedGlow{0%,100%{box-shadow:0 0 8px rgba(255,60,40,.35),0 4px 12px rgba(0,0,0,.45)}50%{box-shadow:0 0 22px rgba(255,70,40,.9),0 4px 12px rgba(0,0,0,.45)}}
+/* 闪卡·虚幻滤镜（2026-09-09）：蓝紫幻影色调 + 若隐若现的呼吸感 */
+.card.card-flash{filter:sepia(.18) hue-rotate(190deg) saturate(.85) brightness(1.06);animation:flash-phantom 2.1s ease-in-out infinite}
+@keyframes flash-phantom{0%,100%{opacity:1;filter:sepia(.18) hue-rotate(190deg) saturate(.85) brightness(1.06);box-shadow:0 0 6px rgba(140,190,255,.25)}50%{opacity:.72;filter:sepia(.3) hue-rotate(215deg) saturate(1.05) brightness(1.15);box-shadow:0 0 16px rgba(160,210,255,.55)}}
+/* 临时卡·绿色粒子描边（2026-09-09）：绿色虚线描边脉冲 + 四边绿色光点 */
+.card.card-tmp{outline:2px dashed rgba(70,255,150,.7);outline-offset:-4px;box-shadow:0 0 8px rgba(70,255,150,.3);animation:tmp-pulse 2.2s ease-in-out infinite}
+@keyframes tmp-pulse{0%,100%{box-shadow:0 0 6px rgba(70,255,150,.22);outline-color:rgba(70,255,150,.55)}50%{box-shadow:0 0 14px rgba(70,255,150,.5);outline-color:rgba(70,255,150,.95)}}
+.tmp-particle{position:absolute;width:5px;height:5px;border-radius:50%;background:#46ff96;box-shadow:0 0 6px 1px rgba(70,255,150,.8);pointer-events:none;z-index:3;animation:tmp-spark 1.4s ease-in-out infinite}
+@keyframes tmp-spark{0%,100%{opacity:.25;transform:scale(.6)}50%{opacity:1;transform:scale(1.25)}}
+/* 红品质球（2026-08-24 奥数之王升红） */
+.q-orb.q-red{background:radial-gradient(circle at 35% 30%,#ffb0a0,#d03020);box-shadow:0 0 10px rgba(255,80,60,0.75)}
+/* 音效静音按钮（2026-08-23）：fixed 右上角，全场景可用 */
+#sfxToggle{position:fixed;top:54px;right:12px;z-index:300;width:36px;height:36px;border-radius:50%;
+  background:rgba(13,25,42,.72);border:1.5px solid rgba(140,190,240,.45);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;user-select:none;
+  transition:transform .15s,box-shadow .15s;backdrop-filter:blur(2px)}
+#sfxToggle:hover{transform:scale(1.12);box-shadow:0 0 12px rgba(140,190,240,.4)}
+/* ===== 设置页（2026-08-23）：全屏覆盖面板，左页签右内容，常规游戏设置界面布局 ===== */
+/* 设置齿轮按钮：紧挨 🔊 左侧，全场景可点开设置 */
+#settingsToggle{position:fixed;top:54px;right:56px;z-index:300;width:36px;height:36px;border-radius:50%;
+  background:rgba(13,25,42,.72);border:1.5px solid rgba(140,190,240,.45);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;user-select:none;
+  transition:transform .15s,box-shadow .15s,color .15s;backdrop-filter:blur(2px)}
+#settingsToggle:hover{transform:scale(1.12) rotate(35deg);box-shadow:0 0 12px rgba(255,215,0,.5);color:#ffd700}
+/* 全屏按钮（2026-08-29）：fixed 右上角，紧挨设置齿轮左侧 */
+#fullscreenToggle{position:fixed;top:54px;right:100px;z-index:300;width:36px;height:36px;border-radius:50%;
+  background:rgba(13,25,42,.72);border:1.5px solid rgba(140,190,240,.45);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;user-select:none;
+  transition:transform .15s,box-shadow .15s;backdrop-filter:blur(2px)}
+#fullscreenToggle:hover{transform:scale(1.12);box-shadow:0 0 12px rgba(140,190,240,.4)}
+/* 触屏横屏下右上角三按钮右移一点，避免顶到边缘 */
+@media (orientation:landscape) and (pointer:coarse){
+  #sfxToggle{right:10px}
+  #settingsToggle{right:52px}
+  #fullscreenToggle{right:94px}
+}
+/* 遮罩 + 面板 */
+.st-overlay{position:fixed;inset:0;z-index:280;background:rgba(5,10,20,.78);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;animation:stFade .22s ease}
+@keyframes stFade{from{opacity:0}to{opacity:1}}
+.st-panel{width:min(700px,94vw);max-height:88vh;display:flex;flex-direction:column;
+  background:linear-gradient(165deg,#182c50 0%,#0f1e38 58%,#0c1830 100%);
+  border:2px solid rgba(130,180,240,.4);border-radius:16px;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px rgba(255,215,0,.08),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:stPop .26s cubic-bezier(.34,1.4,.5,1)}
+@keyframes stPop{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
+.st-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;
+  border-bottom:1px solid rgba(130,180,240,.18)}
+.st-title{font-size:22px;font-weight:bold;letter-spacing:10px;color:#ffd700;text-shadow:0 2px 10px rgba(255,215,0,.35)}
+.st-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:#8ab4f8;font-size:15px;background:rgba(13,25,42,.6);border:1px solid rgba(140,190,240,.3);
+  transition:all .15s}
+.st-close:hover{color:#ff8080;border-color:#ff8080;transform:rotate(90deg)}
+.st-body{display:flex;min-height:0;flex:1}
+/* 左侧页签 */
+.st-tabs{display:flex;flex-direction:column;gap:6px;padding:14px 12px 14px 16px;
+  border-right:1px solid rgba(130,180,240,.18);flex-shrink:0}
+.st-tab{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;cursor:pointer;
+  color:#93a8c4;font-size:15px;font-weight:bold;letter-spacing:2px;position:relative;transition:all .15s;
+  border:1px solid transparent;white-space:nowrap}
+.st-tab:hover{color:#e0e8f0;background:rgba(50,90,150,.18)}
+.st-tab.active{color:#ffd700;background:linear-gradient(90deg,rgba(255,215,0,.14),rgba(255,215,0,.02));
+  border-color:rgba(255,215,0,.4)}
+.st-tab.active::before{content:'';position:absolute;left:-16px;top:20%;bottom:20%;width:3px;border-radius:3px;
+  background:#ffd700;box-shadow:0 0 8px rgba(255,215,0,.8)}
+.st-tab-icon{font-size:16px}
+/* 右侧内容 */
+.st-content{flex:1;overflow-y:auto;padding:16px 20px;min-width:0}
+.st-content::-webkit-scrollbar{width:4px}
+.st-content::-webkit-scrollbar-thumb{background:#2a4a6a;border-radius:2px}
+.st-group-title{font-size:16px;font-weight:bold;color:#8ab4f8;letter-spacing:3px;margin-bottom:14px;
+  padding-bottom:8px;border-bottom:1px dashed rgba(138,180,248,.3)}
+.st-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px;
+  background:rgba(20,38,66,.55);border:1px solid rgba(90,130,190,.22);border-radius:10px;margin-bottom:10px;
+  transition:border-color .15s}
+.st-row:hover{border-color:rgba(140,190,240,.45)}
+.st-label{flex:1;min-width:0}
+.st-name{font-size:15px;font-weight:bold;color:#e0e8f0}
+.st-sub{font-size:11px;color:#7e94b8;margin-top:3px;line-height:1.4}
+.st-ctrl{flex-shrink:0;display:flex;align-items:center}
+/* 开关（金色滑块） */
+.st-toggle{width:48px;height:26px;border-radius:13px;background:#2a3a52;border:1.5px solid #4a5f80;
+  cursor:pointer;position:relative;transition:all .2s;flex-shrink:0}
+.st-toggle .st-knob{position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;
+  background:#8fa4c4;transition:all .2s}
+.st-toggle.on{background:linear-gradient(90deg,#8a6a10,#b8921e);border-color:#ffd700}
+.st-toggle.on .st-knob{left:24px;background:#ffd700;box-shadow:0 0 8px rgba(255,215,0,.8)}
+/* 音量滑条（金色填充 + 数值） */
+.st-slider-wrap{display:flex;align-items:center;gap:10px}
+.st-slider-wrap.off{opacity:.35;pointer-events:none}
+.st-slider{-webkit-appearance:none;appearance:none;width:130px;height:6px;border-radius:3px;outline:none;
+  background:linear-gradient(90deg,#ffd700 var(--fill,50%),#2a3a52 var(--fill,50%));cursor:pointer}
+.st-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;
+  background:#ffd700;border:2px solid #fff8dc;box-shadow:0 0 6px rgba(255,215,0,.7);cursor:pointer}
+.st-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#ffd700;border:2px solid #fff8dc;cursor:pointer}
+.st-val{font-size:13px;color:#ffd700;font-weight:bold;min-width:38px;text-align:right}
+/* 分段选择（战斗节奏） */
+.st-seg{display:flex;border-radius:10px;overflow:hidden;border:1px solid rgba(140,190,240,.35)}
+.st-seg-btn{padding:8px 16px;font-size:13px;font-weight:bold;color:#93a8c4;cursor:pointer;
+  background:rgba(13,25,42,.6);transition:all .15s;white-space:nowrap}
+.st-seg-btn + .st-seg-btn{border-left:1px solid rgba(140,190,240,.25)}
+.st-seg-btn:hover{color:#e0e8f0;background:rgba(50,90,150,.3)}
+.st-seg-btn.active{color:#1a1500;background:linear-gradient(180deg,#ffe066,#e6b800)}
+.st-note{font-size:11px;color:#7e94b8;padding:8px 4px 0;line-height:1.5}
+/* 数据页 */
+.st-stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.st-stat{flex:1;min-width:100px;background:rgba(20,38,66,.55);border:1px solid rgba(90,130,190,.25);
+  border-radius:10px;padding:10px;text-align:center}
+.st-stat b{display:block;font-size:20px;color:#ffd700;margin-bottom:2px}
+.st-stat span{font-size:11px;color:#7e94b8}
+.st-danger{margin-top:14px;border:1px solid rgba(200,80,80,.4);border-radius:12px;padding:14px;
+  background:rgba(80,20,20,.18)}
+.st-danger-title{font-size:13px;font-weight:bold;color:#ff9090;margin-bottom:10px;letter-spacing:1px}
+.st-danger-btn{width:100%;margin-bottom:4px}
+.st-danger-btn.armed{animation:stArmPulse 1s infinite;background:#c03030;border-color:#ff5050}
+@keyframes stArmPulse{0%,100%{box-shadow:0 0 0 rgba(255,80,80,0)}50%{box-shadow:0 0 14px rgba(255,80,80,.7)}}
+.st-danger-sub{font-size:11px;color:#a87878;margin-bottom:10px;padding-left:2px}
+/* 关于页 */
+.st-about{text-align:center;padding:12px 6px}
+.st-about-logo{width:190px;max-width:70%;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5))}
+.st-about-name{font-size:19px;font-weight:bold;color:#ffd700;letter-spacing:4px;margin-bottom:6px}
+.st-about-ver{display:inline-block;font-size:12px;color:#1a1500;background:linear-gradient(180deg,#ffe066,#e6b800);
+  padding:3px 12px;border-radius:12px;font-weight:bold;margin-bottom:10px}
+.st-about-line{font-size:12px;color:#93a8c4;margin-bottom:16px;letter-spacing:2px}
+.st-about-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left;margin-bottom:16px}
+.st-about-grid div{font-size:12px;color:#c8d6ea;background:rgba(20,38,66,.55);border:1px solid rgba(90,130,190,.22);
+  border-radius:8px;padding:8px 10px}
+.st-about-tip{font-size:11px;color:#7e94b8;border-top:1px dashed rgba(138,180,248,.25);padding-top:10px}
+.st-back{margin:10px 18px 16px;letter-spacing:6px}
+/* 小屏适配：页签转横向滚动，行内控件换行 */
+@media (max-width:640px){
+  .st-body{flex-direction:column}
+  .st-tabs{flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid rgba(130,180,240,.18);
+    padding:10px 12px;gap:6px}
+  .st-tab{padding:8px 12px;font-size:13px;letter-spacing:1px}
+  .st-tab.active::before{display:none}
+  .st-row{flex-wrap:wrap}
+  .st-ctrl{width:100%;justify-content:flex-end}
+  .st-about-grid{grid-template-columns:1fr}
+  .st-title{font-size:18px;letter-spacing:6px}
+}
+#endTurnBtn:disabled{opacity:.4;cursor:default;border-color:#5a6a80;color:#8a9ab0}
+.drag-ghost{position:fixed;z-index:200;pointer-events:none;transform:translate(-50%,-60%) scale(1.06) rotate(2deg);box-shadow:0 12px 28px rgba(0,0,0,.65);transition:transform .13s ease,box-shadow .13s ease}
+/* 残影也是 .hand-card 克隆：禁用扇形悬停形态（2026-08-23），否则 hover !important 会顶掉定心 transform 导致跳位 */
+.drag-ghost.hand-card:hover{transform:translate(-50%,-60%) scale(1.06) rotate(2deg) !important}
+.drag-ghost.ghost-hot.hand-card:hover{transform:translate(-50%,-60%) scale(1.17) !important}
+/* 拖到出牌区上方：残影磁吸放大+金色描边（命中预告，2026-08-19） */
+.drag-ghost.ghost-hot{transform:translate(-50%,-60%) scale(1.17);box-shadow:0 0 26px rgba(255,215,0,.5),0 14px 30px rgba(0,0,0,.7)}
+.card.dragging-src{opacity:0.35}
+/* 出牌命中：出牌区金光一闪（确认反馈，2026-08-19） */
+#playZone.zone-flash{animation:zoneFlash .42s ease-out}
+@keyframes zoneFlash{0%{opacity:1;box-shadow:inset 0 0 12px rgba(255,215,0,.15)}25%{opacity:1;box-shadow:inset 0 0 46px rgba(255,215,0,.55);border-color:rgba(255,215,0,.85)}100%{opacity:0;box-shadow:inset 0 0 10px rgba(255,215,0,.05)}}
+/* 主菜单：视频背景 */
+#main.menu-mode{overflow:hidden;padding:0;display:flex;flex-direction:column}
+.achievements-mode{overflow:hidden!important;padding:0!important;background:#f5ead2;color:#3d2b1f}.achievement-page{width:100%;height:100%;min-height:100vh;box-sizing:border-box;padding:18px 28px 24px;background:#f5ead2;display:flex;flex-direction:column;gap:14px}.achievement-top{height:58px;display:grid;grid-template-columns:1fr 2fr 1fr;align-items:center;border-bottom:3px solid #a77a45}.achievement-title{text-align:center;font-size:30px;font-weight:bold;letter-spacing:8px;color:#573b25}.achievement-pages{text-align:right;font-size:18px;font-weight:bold;color:#765434}.achievement-back,.achievement-page-btn,.achievement-tab{border:2px solid #a77a45;background:#ead5ad;color:#573b25;border-radius:10px;cursor:pointer;font:inherit;font-weight:bold;padding:8px 16px}.achievement-back{justify-self:start}.achievement-tabs{display:flex;justify-content:center;gap:10px}.achievement-tab{min-width:112px}.achievement-tab.active{background:#a77a45;color:#fff7e8}.achievement-body{min-height:0;flex:1;display:grid;grid-template-columns:2fr 1fr;gap:18px}.achievement-grid-wrap{min-width:0;overflow:hidden}.achievement-grid{height:100%;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));grid-auto-rows:minmax(115px,1fr);gap:12px;padding:4px 10px 10px 4px;align-content:start;cursor:grab}.achievement-tile{min-width:0;border:4px solid var(--ach-color);border-radius:14px;background:#fffaf0;color:#4a3323;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:8px;box-shadow:0 3px 0 #b99a6c}.achievement-tile:hover,.achievement-tile.selected{transform:translateY(-3px);background:#fff}.achievement-icon{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:#ead5ad;color:#876842;font-size:25px;font-weight:bold}.achievement-tile-name{font-size:14px;font-weight:bold;line-height:1.25;text-align:center;word-break:break-word}.achievement-info{min-width:0;position:relative;border:5px solid var(--ach-color);border-radius:18px;background:#fffaf0;padding:24px 22px;box-shadow:0 4px 0 #b99a6c;overflow:auto}.achievement-info-name{font-size:26px;font-weight:bold;text-align:center;padding-bottom:12px;border-bottom:2px dashed #c9ad75}.achievement-stars{text-align:center;color:var(--ach-color);font-size:25px;letter-spacing:2px;margin:14px 0}.achievement-stars span{font-size:14px;color:#765434;letter-spacing:0}.achievement-info-row{border-top:1px solid #ead5ad;padding:13px 0}.achievement-info-row b{font-size:15px;color:#765434}.achievement-info-row p{margin:7px 0 0;line-height:1.65;font-size:15px}.achievement-status{position:absolute;right:18px;top:16px;color:var(--ach-color);font-weight:bold}.achievement-empty{height:100%;display:grid;place-items:center;color:#a58b69;font-size:18px}.achievement-footer{display:flex;align-items:center;justify-content:center;gap:24px;color:#765434;font-size:13px}.achievement-page-btn:disabled{opacity:.45;cursor:not-allowed}
+.shop-replace-badge{position:absolute;right:4px;top:3px;color:#b53b27;font-size:10px;font-style:normal;font-weight:bold}.shop-replace-card-row{display:flex;gap:16px;align-items:flex-start;background:#fbf1d8;border:2px solid #c9ad75;border-radius:10px;padding:10px}.shop-replace-card{flex:1;min-width:0}.shop-replace-items{width:150px;display:flex;flex-direction:column;gap:7px;align-items:stretch}.shop-replace-new{font-size:11px;color:#765f3d;border-bottom:1px dashed #c9ad75;padding-bottom:6px}.shop-replace-owned{display:flex;align-items:center;gap:6px;background:#fff;border:2px solid #c9ad75;border-radius:50px;padding:5px;font-size:20px}.shop-replace-owned small{font-size:10px;color:#4a3822}.shop-replace-choice-list{display:flex;flex-direction:column;gap:8px}.shop-replace-choice{display:flex;align-items:center;gap:10px;text-align:left;border:2px solid #c9ad75;border-radius:9px;background:#fffaf0;padding:8px;cursor:pointer;color:#4a3822}.shop-replace-choice>span:first-child{font-size:24px}.shop-replace-choice span:nth-child(2){display:flex;flex-direction:column;flex:1}.shop-replace-choice small{font-size:10px;color:#765f3d;margin-top:3px}.shop-replace-choice i{font-size:10px;color:#ad632f;font-style:normal;white-space:nowrap}.shop-replace-choice:hover{background:#f4e3bf;border-color:#a77a45}
+.menu-wrap{position:relative;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.menu-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:0% center;filter:brightness(1.12);transform:scale(1.2) translateX(-9%)}
+.menu-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,22,40,.18),rgba(10,22,40,.06) 45%,rgba(10,22,40,.5))}
+.menu-content{position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:30vh}
+.start-character-event{position:fixed;inset:0;z-index:300;background:rgba(3,8,16,.72);display:flex;align-items:center;justify-content:center}.sce-window{width:min(860px,94vw);height:min(600px,90vh);display:flex;flex-direction:column;background:#ecf3fb;border:4px solid #91b8df;border-radius:18px;overflow:hidden;box-shadow:0 18px 60px #000b}.sce-title{padding:12px 18px;text-align:center;color:#325e91;font-size:20px;font-weight:900;letter-spacing:3px}.sce-scene{position:relative;flex:1;min-height:0;background:linear-gradient(135deg,#dceafa,#f7e9dc);overflow:hidden;cursor:pointer}.sce-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.sce-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 25%,rgba(5,12,24,.72))}.sce-avatar{position:absolute;left:20px;bottom:22px;width:128px;height:128px;border-radius:50%;object-fit:cover;border:5px solid #fff0c4}.sce-dialogue{position:absolute;left:168px;right:24px;bottom:24px;min-height:105px;padding:15px 20px;background:rgba(255,250,238,.95);border:3px solid #d3a75c;border-radius:15px;color:#3c3026;text-align:left}.sce-speaker{display:block;color:#a75b2c;margin-bottom:7px}.sce-text{font-size:16px;line-height:1.65;white-space:pre-wrap}.sce-dialogue small{position:absolute;right:13px;bottom:7px;color:#927b63}.sce-options{display:flex;gap:10px;padding:12px 16px;justify-content:center;background:#e5eef8}.sce-option{min-width:150px}.sce-ed-label{display:flex;flex-direction:column;gap:4px;margin:7px 0;color:#8ab4f8;font-size:11px}.sce-ed-label input,.sce-ed-label select,.sce-ed-label textarea{box-sizing:border-box;width:100%;border:1px solid #385675;border-radius:6px;background:#0d1d30;color:#e3edf8;padding:7px;font:12px/1.5 monospace}.sce-ed-help{margin:-3px 0 7px;color:#7188a0;font-size:10px;line-height:1.45}
+.start-character-event.xiaolei-special-frame .sce-window{position:relative;width:min(1100px,96vw);height:auto;aspect-ratio:16/9;border:0;border-radius:0;background:#070b10 url('UI/小蕾事件框.png') center/contain no-repeat;box-shadow:none}.start-character-event.xiaolei-special-frame .sce-title{position:absolute;left:5%;top:5%;z-index:3;padding:0;color:#315d91;text-shadow:0 1px #fff}.start-character-event.xiaolei-special-frame .sce-scene{position:absolute;inset:0;background:transparent}.start-character-event.xiaolei-special-frame .sce-bg,.start-character-event.xiaolei-special-frame .sce-shade,.start-character-event.xiaolei-special-frame .sce-avatar{display:none!important}.start-character-event.xiaolei-special-frame .sce-dialogue{left:5%;right:31%;bottom:16%;min-height:24%;background:rgba(255,255,255,.72);border:2px solid rgba(70,140,205,.72);color:#243c56}.start-character-event.xiaolei-special-frame .sce-options{position:absolute;z-index:4;left:5%;right:31%;bottom:5%;padding:0;background:transparent}.start-character-event.xiaolei-special-frame .sce-speaker{color:#246aa4}
+.te-fullscreen.xiaolei-special-frame{background:#070b10 url('UI/小蕾事件框.png') center/cover no-repeat}.te-fullscreen.xiaolei-special-frame:after,.te-fullscreen.xiaolei-special-frame .te-holes,.te-fullscreen.xiaolei-special-frame .te-ava{display:none}.te-fullscreen.xiaolei-special-frame .te-top{position:absolute;left:5%;top:5%;margin:0;color:#3273ab;z-index:2}.te-fullscreen.xiaolei-special-frame .te-name{position:absolute;left:5%;top:10%;margin:0;color:#315d91;z-index:2}.te-fullscreen.xiaolei-special-frame .te-narr{position:absolute;left:5%;right:auto;top:17%;bottom:22%;width:62%;min-height:0;padding:20px 24px;background:rgba(255,255,255,.72);border:2px solid rgba(70,140,205,.72);color:#243c56;overflow:auto;box-sizing:border-box}.te-fullscreen.xiaolei-special-frame #te-opts{position:absolute;left:5%;bottom:7%;width:62%;margin:0}.te-fullscreen.xiaolei-special-frame .te-opt{background:rgba(255,255,255,.9);border-color:#72aee0;color:#295b86}.te-fullscreen.xiaolei-special-frame.xiaolei-talent-pick .te-pick{position:absolute;left:5%;top:16%;bottom:6%;width:62%;padding:0;overflow:auto;justify-content:flex-start}.te-fullscreen.xiaolei-special-frame.xiaolei-talent-pick .te-pick .card{background:rgba(13,35,58,.92)}
+.menu-main-btns{position:absolute;left:50%;transform:translateX(-50%);bottom:13vh;display:flex;flex-direction:column;gap:18px;z-index:2;align-items:center}
+.menu-corner{position:absolute;top:18px;right:18px;display:flex;gap:10px;z-index:2}
+.corner-box{position:relative;width:76px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:all .15s}
+.corner-box:hover{transform:translateY(-3px)}
+.corner-box img{width:56px;height:56px;object-fit:contain;filter:drop-shadow(0 3px 8px rgba(0,0,0,.55));transition:transform .15s}
+.corner-box:hover img{transform:scale(1.12)}
+.corner-box .cb-label{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;background:#fff;color:#1a3050;padding:3px 10px;border-radius:6px;font-size:11px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;z-index:5;text-shadow:none}
+.corner-box:hover .cb-label{opacity:1}
+.menu-title{font-size:54px;font-weight:bold;color:#ffd700;text-shadow:0 0 26px rgba(255,215,0,.55),0 4px 12px rgba(0,0,0,.75);letter-spacing:6px;margin-bottom:8px}
+.menu-logo-wrap{position:relative;display:inline-block;margin-bottom:8px}
+.menu-logo{display:block;width:430px;max-width:72vw;filter:drop-shadow(0 4px 18px rgba(0,0,0,.65))}
+.menu-logo-badge{position:absolute;right:-6px;bottom:-8px;background:#c04020;border:2px solid #ffd700;color:#ffd700;font-size:13px;font-weight:bold;padding:3px 10px;border-radius:12px;letter-spacing:2px;transform:rotate(-6deg);text-shadow:0 1px 2px rgba(0,0,0,.6);white-space:nowrap}
+.menu-sub{font-size:13px;color:#8ab4f8;text-shadow:0 2px 8px rgba(0,0,0,.85);margin-bottom:30px}
+.menu-txt-btn{background:none;border:none;cursor:pointer;font-size:24px;font-weight:bold;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.85);letter-spacing:4px;padding:10px 16px;transition:all .15s;font-family:inherit}
+.menu-txt-btn:hover{color:#ffd700;transform:translateY(-3px);text-shadow:0 0 16px rgba(255,215,0,.55),0 2px 8px rgba(0,0,0,.85)}
+.menu-txt-btn:active{transform:scale(.95)}
+.menu-txt-btn:disabled{color:#5a7a9a;cursor:not-allowed;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.menu-ver{position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:10px;color:#4a6a8a;z-index:2;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+/* 角色选择页 v2：左侧小头像 + 右侧立绘框/信息框 */
+.char-select-wrap{display:flex;gap:10px;align-items:stretch}
+.avatar-grid{width:36%;flex-shrink:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;align-content:start}
+.avatar-cell{aspect-ratio:1/1;background:#1a3050;border:2px solid #2a4a6a;border-radius:10px;padding:6px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0}
+.avatar-cell:hover{transform:translateY(-2px);border-color:#4080e0}
+.avatar-cell.selected{border-color:#ffd700;box-shadow:0 0 10px rgba(255,215,0,.45);background:#1e3a5c}
+.avatar-cell .av-img{flex:1;width:100%;border-radius:8px;background:#0d1f33;border:1px solid #1a3050;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0;position:relative}
+.avatar-cell .av-img-art{width:100%;height:100%;object-fit:cover;display:block}
+.avatar-cell .av-emoji{font-size:28px;line-height:1.1}
+.avatar-cell .av-name{font-size:11px;font-weight:bold;color:#e0e8f0;text-align:center;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:clip;max-width:100%}
+.char-detail{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+.char-portrait-frame{width:150px;flex-shrink:0;align-self:stretch;border:2px solid #2a4a6a;border-radius:10px;overflow:hidden;position:relative;background:#0d1f33;min-height:320px}
+.char-portrait-frame .portrait-emoji{font-size:56px}
+.char-info{background:#101d30;border:2px solid #204060;border-radius:10px;padding:10px 12px;font-size:11px;color:#a0b8d0;line-height:1.8}
+.char-info .ci-row .lbl{color:#8ab4f8}
+.char-info .ci-name{font-size:15px;font-weight:bold;color:#ffd700}
+.char-info .ci-star{color:#e0a040;font-weight:bold}
+.char-info .ci-skill b{color:#ffd700}
+.char-info .ci-stars{border-top:1px dashed #204060;margin-top:6px;padding-top:6px}
+.char-info .s-line{color:#e0a040;padding-left:8px}
+.char-info .ci-deck{cursor:pointer;color:#80c0ff}
+.char-info .ci-deck:hover{color:#ffd700}
+/* 选角色页 v4：原版社交界面重建（背景=bg_socialclub.png，版式按原版OCR坐标） */
+#main.char-select-mode{overflow:hidden;padding:0;display:flex;flex-direction:column}
+#app.charselect-full{max-width:100%;background:url('社交/bg_socialclub.png') center 0%/cover no-repeat;background-color:#1a2a3a}
+#app.charselect-full #main,#app.charselect-full #topBar,#app.charselect-full #bottomBar{background:transparent;border:none}
+#app.charselect-full #bottomBar{min-height:0;padding:0}
+/* ===== 选角色页壁纸层（2026-08-23 临时测试：借用三本小说壁纸，切换角色交叉渐变）=====
+   层级方案与龙族壁纸 .lz-bg 相同：body 挂 fixed 层 z-index:0 盖住 #app 底图，
+   #main 等提为 z-index:1 保证 UI 在壁纸之上；两层 .cw-layer 轮流承载新旧壁纸交叉淡入 */
+#charwall{position:fixed;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .5s ease}
+#charwall.show{opacity:1}
+#charwall .cw-layer{position:absolute;inset:0;background:center 0%/cover no-repeat;opacity:0;transition:opacity .7s ease}
+#charwall .cw-layer.on{opacity:1}
+/* 暖色薄纱压在壁纸上：保证深色壁纸下的深棕文字可读（嫌亮/嫌暗改这两个透明度即可） */
+#charwall .cw-shade{position:absolute;inset:0;z-index:2;background:linear-gradient(rgba(244,236,214,.42),rgba(244,236,214,.62))}
+#app.charselect-full #topBar,#app.charselect-full #main,#app.charselect-full #bottomBar{position:relative;z-index:1}
+/* 局外背景（用户提供 其他插画/局外背景.png，2048×1152）：战斗/主菜单/选角色页之外的所有界面 */
+#app.outside-full{max-width:100%;background:url('其他插画/局外背景.png') center 0%/cover no-repeat;background-color:#1a2a3a}
+#app.outside-full #main{background:transparent}
+#app.outside-full #topBar,#app.outside-full #bottomBar{background:rgba(13,25,42,.9)}
+.soc-wrap{position:relative;flex:1;min-height:0;width:100%}
+.soc-tabs{position:absolute;left:50%;transform:translateX(-50%);top:6.5%;display:flex;gap:30px;color:#5a4a35;font-size:15px;font-weight:bold;white-space:nowrap}
+.soc-tabs .tab{opacity:.55;letter-spacing:2px;position:relative}
+.soc-tabs .tab.on{opacity:1;color:#8a5a10;text-shadow:0 1px 2px rgba(255,255,255,.5)}
+.soc-tab-line{position:absolute;left:0;right:0;bottom:-5px;height:3px;background:#c8963c;border-radius:2px}
+/* 选角色大框（包住左侧卡片列） */
+.soc-bigframe{position:absolute;left:5%;top:5%;width:13%;height:88%;background:rgba(248,241,224,.55);border:2px solid rgba(140,105,50,.4);border-radius:12px;box-shadow:0 3px 10px rgba(60,40,10,.12);z-index:1}
+/* 左侧同学卡循环列表（大框内，平滑滚动+吸附+无限循环） */
+.soc-list{position:absolute;left:5.9%;top:7%;width:11.2%;height:86%;overflow:hidden;z-index:2}
+.soc-track{display:flex;flex-direction:column;gap:10px;transition:transform .45s cubic-bezier(.22,.85,.3,1);will-change:transform}
+.soc-card{display:flex;align-items:center;gap:7px;width:100%;height:var(--cardH,100px);flex-shrink:0;background:rgba(255,250,240,.88);border:2px solid rgba(140,105,50,.45);border-radius:9px;padding:5px 8px 5px 6px;cursor:pointer;box-shadow:0 3px 8px rgba(60,40,10,.22);box-sizing:border-box}
+.soc-card:hover{border-color:#c8963c}
+.soc-card.sel{border-color:#c8963c;box-shadow:0 0 12px rgba(200,150,60,.5)}
+.soc-card.mock{opacity:.55;cursor:default}
+.soc-card.mock:hover{border-color:rgba(140,105,50,.45)}
+.soc-card .sc-ava{width:46%;aspect-ratio:1/1;height:auto;max-height:100%;border-radius:7px;overflow:hidden;background:#e8dcc2;flex-shrink:0;border:1px solid rgba(140,105,50,.4);position:relative}
+.soc-card .sc-ava img{width:100%;height:100%;object-fit:cover;display:block}
+.soc-card .sc-ava img.av-upper{object-position:50% 8%}
+.soc-card .sc-ava .av-emoji{font-size:26px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.soc-card .sc-name{font-size:14px;font-weight:bold;color:#3a2e22;white-space:nowrap}
+.soc-card .sc-badge{font-size:9px;color:#fff;background:#c8963c;border-radius:8px;padding:1px 7px;font-weight:bold;white-space:nowrap}
+/* 关系等级区（原版好感进度位置 x≈34%） */
+.soc-rel{position:absolute;left:31.5%;top:19%;width:21%;display:flex;flex-direction:column;gap:5px;align-items:center}
+.soc-rel .sr-title{font-size:12px;font-weight:bold;color:#8a5a10;letter-spacing:2px}
+.soc-hearts{display:flex;gap:4px}
+.soc-hearts .heart{font-size:22px;color:#d8c9a8;cursor:pointer;transition:transform .12s;text-shadow:0 1px 2px rgba(60,40,10,.25)}
+.soc-hearts .heart.on{color:#d84a4a}
+.soc-hearts .heart:hover{transform:scale(1.18)}
+.soc-rel .sr-name{font-size:13px;font-weight:bold;color:#5a4a35}
+.soc-rel .sr-hint{font-size:10px;color:#8a6a3a}
+/* 大立绘框（原版深色立绘卡位置 x≈31%~43% y≈43%~65%，覆盖同尺寸框） */
+.soc-hero{position:absolute;left:44.5%;top:16.5%;width:12.4%;height:69%;overflow:hidden;background:rgba(224,207,172,.5);border:2px solid rgba(140,105,50,.35);border-radius:10px;box-shadow:0 3px 10px rgba(60,40,10,.12);z-index:3}
+.soc-hero .hero-art{width:100%;height:100%;object-fit:contain;display:block}
+.soc-hero .hero-art.hero-huxiaomeng-normal,.soc-hero .hero-art.hero-huxiaomeng-ex{position:absolute;left:50%;top:0;width:auto;max-width:none;height:100%;transform:translateX(-50%);transform-origin:50% 50%;object-fit:contain}
+.soc-hero .hero-art.hero-art-upper{object-fit:contain;object-position:50% 0;transform:scale(1.75);transform-origin:50% 0}
+.soc-hero .hero-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.soc-hero .hero-ph .portrait-emoji{font-size:40px}
+.soc-hero .hero-ph .portrait-hint{font-size:10px;color:#c8b898}
+.soc-hero-badge{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(30,22,16,0) 0%,rgba(30,22,16,.9) 50%);padding:16px 6px 5px;text-align:center;pointer-events:none}
+.soc-hero-badge .rel-bar{pointer-events:auto}
+/* 中间三个米黄框（顶部加深条），头像卡与立绘之间 */
+.soc-slot{position:absolute;left:18%;width:23%;height:16%;border-radius:8px;border:2px solid rgba(140,105,50,.28);box-shadow:0 3px 8px rgba(60,40,10,.1);background:linear-gradient(180deg,#e3d2ae 0%,#e3d2ae 20%,#f8f1e0 20%)}
+.soc-slot .ss-label{position:absolute;left:9px;top:4px;font-family:'KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:18px;font-weight:bold;color:#5a4630;letter-spacing:2px}
+/* 资料框信息行（值先空着，回头填） */
+.soc-slot .info-rows{position:absolute;left:6%;right:6%;top:26%;bottom:4%;display:flex;flex-direction:column;justify-content:space-evenly}
+.soc-slot .info-row{display:flex;align-items:baseline;gap:10px;font-family:'KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:15px;color:#4a3822}
+.soc-slot .ir-lbl{flex-shrink:0;font-weight:bold;color:#6b5a3d;letter-spacing:1px}
+.soc-slot .ir-val{flex:1;border-bottom:1px dashed rgba(140,105,50,.35);min-height:1.1em}
+.soc-slot .attr-icons{position:absolute;left:4%;right:4%;top:24%;bottom:6%;display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;gap:4px}
+/* 行宽固定，图标固定尺寸固定位置，数字大小变化不影响图标 */
+.soc-slot .attr-row{display:flex;align-items:center;justify-content:flex-start;gap:10px;height:30%;width:72%;margin:0 auto}
+.soc-slot .attr-row img{height:34px;width:auto;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 3px rgba(60,40,10,.25))}
+/* 艺术字数值：优设标题黑 + 各自图标主题色渐变 */
+@font-face{font-family:'YST';src:url('字体/优设标题黑.ttf') format('truetype');font-display:swap}
+.soc-slot .attr-val{font-family:'YST','KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:26px;font-weight:bold;color:transparent}
+.soc-slot .attr-val-i{background-image:linear-gradient(180deg,#68c8e8 0%,#085898 100%);-webkit-background-clip:text;background-clip:text}
+.soc-slot .attr-val-e{background-image:linear-gradient(180deg,#f8c878 0%,#c87818 100%);-webkit-background-clip:text;background-clip:text}
+.soc-slot .attr-val-p{background-image:linear-gradient(180deg,#a8d868 0%,#489808 100%);-webkit-background-clip:text;background-clip:text}
+/* 珍视之物框（羁绊点/命运点/关系等级测试，2026-08-21） */
+.soc-slot-item .item-rows{position:absolute;left:6%;right:6%;top:24%;bottom:4%;display:flex;flex-direction:column;justify-content:space-evenly;gap:2px}
+.soc-slot-item .item-row{display:flex;align-items:center;gap:6px;font-family:'KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:12px;color:#4a3822}
+.soc-slot-item .item-lbl{flex-shrink:0;font-weight:bold;color:#6b5a3d;letter-spacing:1px;font-size:13px}
+.soc-slot-item .item-val{font-weight:bold;font-size:15px}
+.soc-slot-item .star-btns{display:flex;gap:3px;flex:1}
+.soc-slot-item .star-btn{flex:1;min-width:0;height:24px;line-height:1;padding:0 2px;border:1.5px solid rgba(140,105,50,.5);background:rgba(255,250,240,.85);color:#8a6a3a;border-radius:6px;font-size:10px;font-weight:bold;cursor:pointer;font-family:inherit;white-space:nowrap}
+.soc-slot-item .star-btn.on{background:#c8963c;border-color:#a5782a;color:#fff}
+.soc-slot-item .star-btn.cap{opacity:.5;cursor:not-allowed}
+.soc-slot-item .upgrade-btn{border:none;background:#e04858;color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:bold;cursor:pointer;font-family:inherit;margin-left:auto}
+.soc-slot-item .upgrade-btn:disabled{background:#b8a88c;cursor:default}
+.soc-card.locked .sc-name{color:#9a8c78}
+.soc-card .sc-badge-lock{position:absolute;top:4px;right:4px;background:rgba(60,40,10,.72);font-size:9px;padding:1px 5px}
+/* 右侧关系效果面板（原版 x≈60%~87% y≈17%~81%，顶部加深+标题） */
+.soc-effects{position:absolute;left:59.5%;top:16.5%;width:27.5%;height:64%;background:linear-gradient(180deg,#e3d2ae 0%,#e3d2ae 7%,#f8f1e0 7%);border:2px solid rgba(140,105,50,.28);border-radius:8px;box-shadow:0 3px 8px rgba(60,40,10,.1);padding:12px 16px;overflow-y:auto}
+.soc-effects .ss-label{color:#38270f}
+.soc-effects.has-form-pages .character-form-pages{position:absolute;inset:0 0 auto;height:7%;display:grid;grid-template-columns:1fr 20px 1fr;align-items:center;z-index:5}
+.character-form-pages .form-page{width:100%;height:100%;min-height:0;border:0;background:transparent;color:#765f3d;font:inherit;font-size:14px;text-align:center;padding:0;cursor:pointer}
+.character-form-pages .form-page.selected{color:#38270f;font-weight:bold;text-decoration:underline;text-underline-offset:3px}
+.character-form-pages .form-page-divider{text-align:center;color:#765f3d;font-size:18px}
+.soc-effects.has-form-pages>.ss-label{position:absolute;top:8%;left:6%;line-height:1.2}
+.soc-effects.has-form-pages .eff-grid{top:15%}
+.soc-effects .eff-grid{position:absolute;left:6%;right:6%;top:11%;bottom:3%;display:flex;flex-direction:column}
+.soc-effects .eff-cell{position:relative;border-bottom:1.5px dashed rgba(140,105,50,.35)}
+.soc-effects .eff-cell:last-child{border-bottom:none}
+.soc-effects .eff-tag{position:absolute;top:2px;right:0;font-family:'KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:16px;color:#5a4630;white-space:nowrap}
+.soc-effects .eff-tag.reached{color:#2e8b3e}
+.soc-effects .eff-check{color:#2e8b3e;margin-left:4px}
+.soc-effects .eff-lines{position:absolute;left:0;right:0;top:26px;display:flex;flex-direction:column;gap:3px}
+.soc-effects .eff-line{position:relative;font-family:'KaiTi','STKaiti','楷体','Microsoft YaHei',sans-serif;font-size:17px;color:#4a3822;cursor:help;white-space:nowrap}
+/* 技能说明改用挂在页面顶层的提示框，避免被此面板的滚动区域裁切。 */
+.soc-effects .eff-line[data-tip].legacy-css-tip:hover::after{content:attr(data-tip);position:absolute;left:0;top:100%;z-index:90;background:#3a2a14;color:#f8ead0;padding:6px 10px;border-radius:6px;font-size:11px;white-space:pre-line;width:max-content;max-width:280px;border:1px solid #c8963c;box-shadow:0 4px 10px rgba(0,0,0,.35);pointer-events:none}
+.soc-effects .eff-line.eff-line-w{white-space:normal;line-height:1.5;font-size:14px}
+.soc-effects .eff-line.eff-click{text-decoration:underline;cursor:pointer}
+/* 关系效果格文案配色（用户定）：技能名=蓝 天赋名=紫 卡牌名=金，其他字不变色 */
+.soc-effects .eff-k-skill{color:#2060a0}
+.soc-effects .eff-k-talent{color:#7040a8}
+.soc-effects .eff-k-card{color:#a06010}
+.soc-effects .se-title{font-size:16px;font-weight:bold;color:#8a5a10;letter-spacing:3px;margin-bottom:8px;text-align:center}
+.soc-effects .se-line{font-size:11.5px;color:#5a4a35;line-height:1.75;padding-left:8px;border-left:3px solid rgba(200,150,60,.55);margin:4px 0}
+.soc-effects .se-line .lv{color:#a06010;font-weight:bold}
+/* 底部开始栏（原版关注按钮 x≈51.7% y≈88.6%） */
+.soc-startbar{position:absolute;left:40%;top:85.5%;width:22%;display:flex;align-items:center;justify-content:center;gap:12px}
+.soc-startbar .diff-box{min-width:96px}
+/* 右上角返回：叉+圆框（用户定 2026-08-16） */
+.soc-back{position:absolute;right:1.5%;top:1%;z-index:6;width:34px;height:34px;border-radius:50%;border:2px solid rgba(74,56,34,.55);background:rgba(255,250,240,.78);color:#4a3822;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;padding:0;font-family:inherit}
+.soc-back:hover{border-color:#c8963c;color:#a06010;background:rgba(255,246,225,.95);transform:scale(1.08)}
+.follow-page{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;padding:10px 14px}
+.follow-head{display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap;padding-left:2%}
+.follow-title{width:190px;filter:drop-shadow(0 2px 6px rgba(60,40,10,.35))}
+.follow-title2{width:140px;filter:drop-shadow(0 2px 6px rgba(60,40,10,.35))}
+.rel-selector{display:flex;gap:5px;flex-wrap:wrap}
+.rel-btn{border:2px solid rgba(140,105,50,.45);background:rgba(255,250,240,.72);color:#5a4a35;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:bold;cursor:pointer;transition:all .15s;font-family:inherit}
+.rel-btn:hover{border-color:#c8963c;transform:translateY(-1px)}
+.rel-btn.on{background:rgba(255,244,220,.92);border-color:#c8963c;color:#8a5a10;box-shadow:0 0 8px rgba(200,150,60,.4)}
+.follow-body{display:flex;gap:2%;flex:1;min-height:0;padding-left:6%}
+/* 左列表：原版在 x6%~25%，右侧留空给原版场景插画 */
+.follow-list{width:19%;flex-shrink:0;position:relative;border:none;background:transparent}
+.follow-list-inner{position:relative;height:100%;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}
+.follow-row{display:flex;align-items:center;gap:8px;background:rgba(255,250,240,.55);border:2px solid rgba(140,105,50,.35);border-radius:10px;padding:6px 8px;cursor:pointer;transition:all .15s;position:relative;min-height:74px}
+.follow-row:hover{border-color:#c8963c;background:rgba(255,248,232,.75)}
+.follow-row.sel{border-color:#c8963c;box-shadow:0 0 10px rgba(200,150,60,.35);background:rgba(255,246,225,.88)}
+.follow-row.sel .follow-main{padding-right:56px}
+.follow-ava{width:56px;height:56px;flex-shrink:0;border-radius:8px;overflow:hidden;position:relative;background:#e8dcc2;border:1px solid rgba(140,105,50,.4)}
+.follow-ava img{width:100%;height:100%;object-fit:cover;display:block}
+.follow-ava .av-emoji{font-size:24px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.follow-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.follow-name{font-size:13px;font-weight:bold;color:#3a2e22;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.rel-badge{font-size:10px;font-weight:bold;padding:1px 8px;border-radius:10px;color:#fff;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+/* 彩色关系条（等级色条+白字） */
+.rel-bar{display:inline-block;font-size:10px;font-weight:bold;color:#fff;padding:2px 10px;border-radius:4px;letter-spacing:1px;text-shadow:0 1px 2px rgba(0,0,0,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+.follow-eff{font-size:10px;color:#6b5a45;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.follow-yiguanzhu{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:52px;filter:drop-shadow(0 2px 4px rgba(60,40,10,.4));pointer-events:none}
+/* 中右区：角色展示卡 + 下方信息框（原版角色卡在 x27%~39%） */
+.follow-right{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;max-width:50%}
+.follow-hero{flex:1;min-height:0;border:2px solid rgba(140,105,50,.4);border-radius:10px;overflow:hidden;position:relative;background:rgba(255,250,240,.5)}
+.follow-hero .hero-art{width:100%;height:100%;object-fit:contain;display:block;filter:drop-shadow(0 8px 18px rgba(60,40,10,.35))}
+.follow-hero .hero-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.follow-hero .hero-ph .portrait-emoji{font-size:64px}
+.follow-hero .hero-ph .portrait-name{font-size:16px;font-weight:bold;color:#8a5a10}
+.follow-hero .hero-ph .portrait-hint{font-size:11px;color:#8a6a3a}
+.hero-nameplate{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(255,248,232,0) 0%,rgba(255,246,225,.95) 55%);padding:28px 12px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hero-nameplate .hn-name{font-size:17px;font-weight:bold;color:#3a2e22;text-shadow:0 1px 3px rgba(255,255,255,.7)}
+.hero-nameplate .hn-rel{flex-shrink:0}
+.follow-info{flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+/* 信息框改浅色纸质感 */
+#main.char-select-mode .char-info{background:rgba(255,250,240,.8);border:2px solid rgba(140,105,50,.4);color:#5a4a35}
+#main.char-select-mode .char-info .ci-row .lbl{color:#8a6a3a}
+#main.char-select-mode .char-info .ci-name{color:#8a5a10}
+#main.char-select-mode .char-info .ci-star{color:#a06010}
+#main.char-select-mode .char-info .ci-stars{border-top:1px dashed rgba(140,105,50,.4)}
+#main.char-select-mode .char-info .s-line{color:#a06010}
+#main.char-select-mode .char-info .ci-skill b{color:#8a5a10}
+#main.char-select-mode .char-info .ci-deck{color:#2060a0}
+#main.char-select-mode .char-info .ci-deck:hover{color:#c8963c}
+/* 底部开始栏：上下键 + 难度框 + 开始游戏 */
+.start-bar-wrap{position:relative;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.diff-arrows{display:flex;flex-direction:column;gap:3px}
+.diff-arrow{width:32px;height:42px;background:url('社交/btn_arrow_normal.png') center/contain no-repeat;border:none;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));transition:transform .1s}
+.diff-arrow:hover{background-image:url('社交/btn_arrow_highlight.png')}
+.diff-arrow:active{background-image:url('社交/btn_arrow_press.png');transform:scale(.95)}
+.diff-arrow.down{transform:rotate(180deg)}
+.diff-arrow.down:hover{transform:rotate(180deg)}
+.diff-arrow.down:active{transform:rotate(180deg) scale(.95)}
+.diff-box{min-width:112px;text-align:center;background:rgba(255,250,240,.85);border:2px solid rgba(140,105,50,.45);border-radius:10px;padding:5px 14px}
+.diff-box .db-title{font-size:10px;color:#8a6a3a;letter-spacing:3px}
+.diff-box .db-val{font-size:16px;font-weight:bold;color:#8a5a10;margin-top:2px}
+.start-follow-btn{width:148px;height:148px;border:none;cursor:pointer;background:url('社交/btn_social_normal.png') center/contain no-repeat;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:bold;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.85);letter-spacing:3px;transition:transform .15s;font-family:inherit;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+.start-follow-btn:hover{background-image:url('社交/btn_social_highlight.png');transform:scale(1.06)}
+.start-follow-btn:active{background-image:url('社交/btn_social_press.png');transform:scale(.95)}
+@media(max-width:480px){
+  .menu-main-btns{bottom:9vh;gap:10px}
+  .menu-txt-btn{font-size:17px;padding:8px 10px;letter-spacing:2px}
+  .menu-corner{top:10px;right:8px;gap:6px}
+  .corner-box img{width:42px;height:42px}
+  .corner-box .cb-label{font-size:10px}
+  .char-select-wrap{flex-direction:column}
+  .avatar-grid{width:100%;grid-template-columns:repeat(3,1fr)}
+  .char-portrait-frame{width:100%;height:200px;min-height:0}
+  .follow-body{flex-direction:column}
+  .follow-list{width:100%;flex-shrink:0;max-height:200px}
+  .follow-hero{min-height:220px}
+  .follow-title{width:140px}
+  .follow-title2{width:100px}
+  .start-follow-btn{width:108px;height:108px;font-size:14px}
+  .diff-box{min-width:88px}
+  #portraitWrap{width:96px}
+  .bp-left{width:100px}
+  .attr-line{font-size:10px;padding:3px 4px}
+  .portrait-emoji{font-size:32px}
+  #deckZone{width:80px;height:124px}
+  #discardZone{width:80px;height:124px;flex:none}
+  .player-side{width:100px}
+  #handRow{min-height:160px}
+  .hand-card{width:80px;height:124px}
+  #monsterHandRow .mhand-big{width:80px;height:124px}
+  .monster-fly .flip-inner,.monster-fly .flip-front .card,.monster-fly .flip-back{width:80px;height:124px}
+  .monster-pile{width:36px;height:52px}
+  .hand-card .card-art{font-size:38px}
+  .hand-card .name{font-size:11px;padding:0 30px}
+  .hand-card .desc{font-size:9px}
+  #playLogPanel.open{width:170px;height:143px}
+  #playLogHeader,#playLogList{min-width:150px}
+  .log-record::after{width:140px}
+}
+
+/* 生命球使用中心液面显示当前生命，外环保留为装饰。 */
+/* 体力改为黄色（2026-08-19 用户需求） */
+.energy-dot{display:inline-block;width:16px;height:16px;border-radius:50%;margin:1px;border:2px solid #e8b93a;transition:all 0.2s}
+.energy-dot.filled{background:radial-gradient(circle at 35% 30%,#fff3b0,#f5c93a 55%,#d99a18);box-shadow:0 0 6px rgba(245,201,58,.55)}
+.energy-dot.empty{background:transparent}
+/* 攻击出手：玩家立绘突进（2026-08-19） */
+.fx-lunge{animation:fxLunge .42s cubic-bezier(.3,.7,.4,1)}
+@keyframes fxLunge{0%{transform:none}35%{transform:translate(14px,-16px) scale(1.05)}100%{transform:none}}
+/* 套盾特效：护盾光环扩散 + 盾徽上浮（2026-08-19） */
+.fx-shieldring{position:fixed;z-index:150;pointer-events:none;border-radius:50%;border:3px solid rgba(126,200,255,.9);box-shadow:0 0 18px rgba(126,200,255,.55),inset 0 0 14px rgba(126,200,255,.35);transform:translate(-50%,-50%) scale(.4);animation:fxShieldRing .6s ease-out forwards}
+@keyframes fxShieldRing{0%{transform:translate(-50%,-50%) scale(.35);opacity:0}25%{opacity:1}100%{transform:translate(-50%,-50%) scale(1.15);opacity:0}}
+/* 魔戒绿色环形特效（2026-08-22）：绿色圆环扩散全屏 */
+.fx-mojie-ring{position:fixed;z-index:155;pointer-events:none;border-radius:50%;border:4px solid rgba(80,240,120,.95);box-shadow:0 0 30px 12px rgba(80,240,120,.6),inset 0 0 26px rgba(80,240,120,.4);transform:translate(-50%,-50%) scale(.3);animation:fxMojieRing .7s ease-out forwards}
+@keyframes fxMojieRing{0%{transform:translate(-50%,-50%) scale(.25);opacity:0}20%{opacity:1}100%{transform:translate(-50%,-50%) scale(2.6);opacity:0}}
+.fx-shieldrise{position:fixed;z-index:150;pointer-events:none;font-size:30px;transform:translate(-50%,-50%);animation:fxShieldRise .8s ease-out forwards;text-shadow:0 0 10px rgba(126,200,255,.9)}
+@keyframes fxShieldRise{0%{transform:translate(-50%,-20%);opacity:0}25%{opacity:1}100%{transform:translate(-50%,-120%);opacity:0}}
+
+/* Progress bar */
+.progress-bar{height:8px;background:#1a2a3a;border-radius:4px;overflow:hidden;margin:4px 0}
+.progress-fill{height:100%;background:#40a0e0;transition:width 0.3s;border-radius:4px}
+.progress-fill.complete{background:#40e060}
+
+/* buff 正方形小图标（2026-08-30 改版）：占位=底色+emoji；用户替换 buff/{key}.png 后显示真实图案 */
+.buff-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:28px;height:28px;border-radius:6px;background:var(--bc,#333);border:1px solid rgba(255,215,0,.65);cursor:help;margin:2px}
+.buff-ico{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;border-radius:5px;z-index:2;pointer-events:none}
+.buff-sym{position:absolute;z-index:1;font-size:14px;line-height:1;filter:drop-shadow(0 0 2px rgba(0,0,0,.85));pointer-events:none}
+.buff-num{position:absolute;right:1px;bottom:1px;z-index:3;min-width:14px;height:14px;padding:0 3px;box-sizing:border-box;background:linear-gradient(#ef4444,#a40000);color:#fff;font-size:9.5px;font-weight:700;line-height:14px;text-align:center;border-radius:8px;border:1px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.buff-icon:hover::after{display:none}
+#globalBuffTooltip{display:none;position:fixed;width:250px;box-sizing:border-box;padding:8px 10px;border-radius:7px;background:#081525;color:#f6e7aa;border:1px solid #ffd45c;box-shadow:0 6px 22px rgba(0,0,0,.65);font-size:11px;line-height:1.55;white-space:pre-line;pointer-events:none;z-index:100000}
+#globalBuffTooltip.show{display:block}
+.attr-row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:4px 0}
+.attr-item{font-size:11px;color:#a0b8d0;background:#0d1f33;padding:3px 8px;border-radius:4px;cursor:help}
+.attr-item:hover{color:#ffd700}
+
+/* Toast */
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0a1628;color:#ffd700;padding:16px 32px;border-radius:10px;font-size:18px;font-weight:bold;z-index:100;border:3px solid #ffd700;pointer-events:none;animation:toastIn 0.3s easeOut}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.8)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+
+/* Tier badge */
+.tier{font-size:10px;padding:3px 8px;border-radius:10px;color:#fff}
+.tier-common{background:#608040}
+.tier-uncommon{background:#4060a0}
+.tier-rare{background:#6040a0}
+.tier-epic{background:#8040a0}
+.tier-legendary{background:#a08020}
+.tier-mythic{background:#a02020}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal{background:#152840;border:3px solid #2a4a6a;border-radius:12px;padding:20px;max-width:420px;width:90%;max-height:80vh;overflow-y:auto}
+/* 黄色纸面弹窗（与选角色页面同款米黄，卡组类弹窗用） */
+.modal-paper{background:linear-gradient(180deg,#e3d2ae 0%,#e3d2ae 6%,#f8f1e0 6%);border-color:rgba(140,105,50,.5);color:#3a2e22;max-width:560px}
+.paper-title{text-align:center;color:#8a5a10;margin-bottom:4px}
+.paper-sub{text-align:center;color:#5a4630;font-size:11px;margin-bottom:10px}
+.paper-box{background:linear-gradient(180deg,#e3d2ae 0%,#e3d2ae 7%,#f8f1e0 7%);border:2px solid rgba(140,105,50,.4);border-radius:12px;padding:12px;color:#3a2e22}
+/* 统一卡面网格（用户定 2026-08-16）：全游戏卡牌竖版统一尺寸，网格展示 */
+.deck-grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.face-count{position:absolute;bottom:6px;right:6px;background:#0a1628;color:#ffd700;padding:1px 7px;border-radius:10px;font-size:12px;font-weight:bold;z-index:4}
+.tmp-badge{position:absolute;bottom:6px;left:6px;background:rgba(120,60,0,.75);color:#ffd700;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:bold;z-index:4;letter-spacing:1px}
+.deck-cell{display:flex;flex-direction:column;align-items:center;gap:4px}
+.deck-cell-actions{min-height:26px;display:flex;gap:4px;align-items:center;justify-content:center}
+
+.section-title{font-size:12px;font-weight:bold;color:#8ab4f8;margin:8px 0 4px;text-transform:uppercase;letter-spacing:1px}
+
+/* 制作人对话气泡：全场景通用，左侧固定显示角色Q版头像 */
+.producer-dialogue-layer{position:fixed;inset:0;z-index:240;display:flex;align-items:flex-end;justify-content:center;padding:0 18px 34px;pointer-events:none;box-sizing:border-box}
+.producer-dialogue{width:min(760px,94vw);display:flex;align-items:flex-end;gap:12px;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 10px 22px rgba(0,0,0,.34))}
+.producer-dialogue-avatar{width:96px;height:96px;flex:0 0 96px;border-radius:50%;object-fit:cover;background:#f5ead2;border:4px solid #fff3c9}
+.producer-dialogue-bubble{position:relative;flex:1;min-height:76px;padding:15px 20px;border-radius:18px;background:#fffaf0;border:3px solid #d7aa62;color:#3d3025;box-sizing:border-box}
+.producer-dialogue-bubble:before{content:"";position:absolute;left:-15px;bottom:24px;border-width:10px 15px 10px 0;border-style:solid;border-color:transparent #d7aa62 transparent transparent}
+.producer-dialogue-name{font-weight:800;color:#9a5b25;margin-bottom:6px}.producer-dialogue-text{font-size:16px;line-height:1.65;white-space:pre-wrap}.producer-dialogue-hint{text-align:right;font-size:10px;color:#9a846b;margin-top:5px}
+.tutorial-dim{position:fixed;inset:0;background:rgba(5,10,20,.38);z-index:245;pointer-events:auto}.tutorial-target{position:relative!important;z-index:250!important;filter:drop-shadow(0 0 13px #ffe36b) drop-shadow(0 0 25px #ffb52e)!important;animation:tutorialPulse 1s infinite alternate}.tutorial-talk{position:fixed;z-index:255;display:flex;align-items:flex-end;gap:10px;width:min(520px,88vw);cursor:pointer}.tutorial-talk.bottom{left:50%;bottom:28px;transform:translateX(-50%)}.tutorial-talk.left{left:24px;bottom:25%}.tutorial-talk.right{right:24px;bottom:24%}.tutorial-talk img{width:88px;height:88px;border-radius:50%;object-fit:cover;border:4px solid #fff0bc}.tutorial-talk-box{flex:1;min-height:64px;background:#fff9e9;color:#3b2b20;border:3px solid #d79642;border-radius:16px;padding:14px 17px;box-shadow:0 8px 24px #0007;white-space:pre-wrap}.tutorial-talk-name{color:#b05d22;font-weight:900;margin-bottom:5px}.tutorial-event{position:fixed;inset:0;z-index:255;background:rgba(4,8,16,.55);display:flex;align-items:center;justify-content:center}.tutorial-event-card{width:min(620px,90vw);min-height:260px;background:#f8f1df;border:4px solid #b98742;border-radius:18px;padding:24px;display:flex;flex-direction:column;justify-content:space-between;color:#392d22}.tutorial-event-text{white-space:pre-wrap;min-height:150px}.tutorial-cg{position:fixed;inset:0;z-index:260;background:#05070c;display:flex;align-items:center;justify-content:center;overflow:hidden}.tutorial-cg img{width:100%;height:100%;object-fit:contain}.tutorial-cg-caption{position:absolute;left:8%;right:8%;bottom:5%;padding:18px;background:#101522dd;color:white;border-radius:14px;white-space:pre-wrap}.tutorial-cg-close{position:absolute;right:22px;top:18px;z-index:2}.tutorial-active #settingsToggle{z-index:270!important}.tutorial-active #sfxToggle{z-index:270!important}@keyframes tutorialPulse{from{transform:scale(1)}to{transform:scale(1.05)}}
+@media(max-width:520px){.producer-dialogue-avatar{width:70px;height:70px;flex-basis:70px}.producer-dialogue-text{font-size:14px}.producer-dialogue-layer{padding:0 10px 22px}}
+.tutorial-dim{display:none!important;pointer-events:none!important}.tutorial-event{background:transparent!important}.tutorial-talk.start-tip{width:min(360px,42vw);right:auto;bottom:auto;transform:none}
+.tutorial-hand{position:absolute;left:50%;top:-48px;z-index:280;font-size:38px;line-height:1;pointer-events:none;transform:translateX(-50%);animation:tutorialHandTap .65s ease-in-out infinite alternate;filter:drop-shadow(0 3px 4px #0008)}@keyframes tutorialHandTap{from{transform:translate(-50%,-7px)}to{transform:translate(-50%,4px)}}
+.tutorial-card-target{outline:3px solid #ffe36b;outline-offset:3px;filter:drop-shadow(0 0 10px #ffbf36)!important}
+/* 卡牌描述词条提示必须高于插画、专属外框和相邻卡牌。 */
+.hand-card .kw-tip{z-index:400}.hand-card .kw-tip:hover::after{z-index:1000!important;box-shadow:0 8px 20px #000c}.hand-card:hover{z-index:500}
+.avg-cg{cursor:pointer}.avg-bg{position:absolute;inset:0}.avg-ui{position:absolute;left:6%;right:6%;bottom:4%;min-height:145px;padding:24px 30px;background:linear-gradient(135deg,rgba(17,22,38,.94),rgba(49,30,59,.9));border:2px solid rgba(255,222,156,.78);border-radius:18px;box-shadow:0 12px 40px #000b}.avg-name{position:absolute;left:28px;top:-24px;min-width:140px;padding:8px 22px;background:#a84d72;color:#fff7df;border:2px solid #ffd99a;border-radius:13px;font-weight:900;text-align:center}.avg-ui .avg-text{position:static;padding:15px 0 22px;background:none;border-radius:0;font-size:19px;line-height:1.75}.avg-hint{position:absolute;right:22px;bottom:10px;color:#e7cfad;font-size:13px}.avg-log{position:absolute;inset:7% 10%;z-index:3;overflow:auto;padding:24px 32px;background:rgba(11,14,25,.96);border:2px solid #d6b477;border-radius:16px;color:#f6ead5;cursor:default}.avg-log h3{margin-top:0;color:#ffd999}.avg-log p{padding:8px 0;border-bottom:1px solid #ffffff1b;line-height:1.6}.avg-log b{color:#ffc4dc;margin-right:12px}
+
+@media(max-width:360px){.card{min-width:80px;max-width:120px;padding:6px 8px}.card .name{font-size:11px}.card .desc{font-size:9px}}
+
+/* ============================================================
+   移动端横屏适配（2026-08-29 v0.14.2）
+   触发条件：触屏 + 横屏（手机/平板横放）。纯 CSS 覆盖，不改战斗/地图 JS 逻辑。
+   ============================================================ */
+@media (orientation:landscape) and (pointer:coarse){
+
+  /* ---- 顶栏/底栏压缩，给战斗留出高度 ---- */
+  #topBar{min-height:0;padding:6px 10px;gap:8px}
+  #topBar .title{font-size:14px}
+  #topBar .stat{font-size:11px;padding:2px 8px}
+  #bottomBar{min-height:0;padding:5px 10px;gap:8px;font-size:12px}
+
+  /* ---- 战斗页：压缩各区块尺寸，保证一屏放下 ---- */
+  #battleStage{padding:4px 8px 2px;gap:6px}
+  /* 右侧边栏：横屏下更紧凑，减少垂直堆叠密度 */
+  .stage-right{gap:5px;padding:1px 3px 2px;justify-content:center}
+  .et-energy{min-width:44px;padding:3px 4px;gap:2px;border-radius:8px}
+  .et-energy .et-e-label{font-size:8px;line-height:1}
+  .et-energy .et-e-num{font-size:10px}
+  .et-energy .energy-dot{width:8px;height:8px;margin:0}
+  #endTurnBtn{width:50px;height:50px;font-size:10px}
+  #endTurnBtn .eb-icon{font-size:15px}
+
+  .monster-side{width:96px;gap:4px;padding:2px 0 0}
+  .player-side{width:96px;gap:4px;padding:2px 0 0}
+  /* 战场上下半区留白：怪物手牌与玩家状态之间保持呼吸感 */
+  .stage-main{gap:2px}
+  #monsterInfo .mhand-count{font-size:9px}
+  .monster-piles{gap:4px;margin-top:4px}
+  .monster-pile{width:40px;height:58px}
+  .monster-pile .pile-label{font-size:8px;padding:2px 0}
+
+  .nexus{width:56px;height:56px}
+  #dualNexusStack{gap:13px;padding:15px 0 6px}
+  #dualNexusStack{top:calc(-100% + 191px)}
+  #dualNexusStack .nexus{width:68px;height:68px}
+  #dualNexusStack .nexus-tab{left:calc(100% + 10px)}
+  .flaw-ring-svg{left:-15px;top:-15px;width:98px;height:98px}
+  .flaw-ring-label{min-width:19px;height:12px;padding:0 2px;font-size:6px}
+  .flaw-label-logic{left:0;top:-20px}.flaw-label-idea{right:-15px;top:-20px}.flaw-label-answer{right:-15px;bottom:-20px}.flaw-label-tool{left:0;bottom:-20px}
+  .nexus .nexus-tab{font-size:9px;padding:2px 5px}
+  .nexus .nexus-shield{font-size:9px;padding:1px 4px}
+  .nexus-portrait{min-height:70px}
+  .player-mid::before,.monster-mid::before{width:56px;height:56px;flex-basis:56px}
+  .nexus-portrait .portrait-emoji{font-size:34px}
+  .nexus-portrait .portrait-name{font-size:10px}
+
+  #monsterHandRow{min-height:0;gap:6px;padding:2px 4px 4px}
+  #monsterHandRow .mhand-big{width:58px;height:90px}
+  #skillRow{gap:3px}
+  #skillRow .btn{font-size:9px;padding:4px 5px;white-space:normal}
+
+  #statusRow{max-height:44px;font-size:9px}
+  #vitalRow{gap:8px;padding-top:4px;margin-top:4px}
+  #handRow{min-height:0}
+  #handArea{padding:40px 10px 8px}
+  #handArea .hand-card{width:66px;height:104px}
+  #handArea .hand-card + .hand-card{margin-left:-4px} /* 横屏手牌近平铺，兼顾清晰与持牌感 */
+  #handArea .hand-card .card-art{font-size:32px}
+  #handArea .hand-card .name{font-size:10px;top:6px;padding:0 22px}
+  #handArea .hand-card .cost{font-size:11px;top:4px;right:4px;left:auto;padding:1px 5px}
+  #handArea .hand-card .type-badge{font-size:8px;top:5px;left:4px;right:auto;padding:1px 4px}
+  #handArea .card-item-stack{right:3px;top:27px;gap:2px}
+  #handArea .card-item-orb{width:19px;height:19px;min-width:19px;font-size:10px;border-width:1px}
+  #handArea .hand-card .desc{font-size:8px;padding:2px 4px}
+  #handArea .hand-card:hover{transform:rotate(0deg) translateY(-12px) !important;z-index:70}
+  #deckZone,#discardZone{width:54px;height:86px}
+  .pile-zone .pile-label{font-size:8px;padding:2px 0}
+
+  /* 手牌扇形：横屏下弧高/位移减半，避免卡片顶出战斗区 */
+  .hand-card{transform:rotate(var(--fan-rot,0deg)) translateY(calc(var(--fan-y,0px)*0.5)) !important}
+
+  /* 出牌区：横屏时覆盖中部下端，便于拇指拖放 */
+  #playZone{left:20%;right:150px;top:auto;bottom:4px;height:34%}
+
+  /* ---- 主菜单 ---- */
+  .menu-content{padding-top:12vh}
+  .menu-title{font-size:34px;letter-spacing:4px;margin-bottom:4px}
+  .menu-logo{width:280px}
+  .menu-sub{font-size:12px;margin-bottom:16px}
+  .menu-main-btns{bottom:6vh;gap:10px}
+  .menu-txt-btn{font-size:19px;padding:7px 12px;letter-spacing:3px}
+  .menu-corner{top:10px;right:10px;gap:8px}
+  .corner-box{width:58px}
+  .corner-box img{width:44px;height:44px}
+  .menu-ver{bottom:4px}
+
+  /* ---- 选角色页 ---- */
+  .char-select-wrap{gap:6px}
+  .avatar-grid{width:30%;gap:4px}
+  .avatar-cell{padding:3px}
+  .avatar-cell .av-name{font-size:10px}
+  .avatar-cell .av-emoji{font-size:22px}
+  .char-portrait-frame{width:110px;min-height:0;align-self:stretch}
+  .char-portrait-frame .portrait-emoji{font-size:40px}
+  .char-info{font-size:10px;line-height:1.6;padding:6px 8px}
+  .char-info .ci-name{font-size:13px}
+
+  /* ---- 地图 ---- */
+  .map-row{min-width:44px}
+  .map-node{width:58px;height:58px;font-size:26px}
+  .map-node.boss{width:66px;height:66px;font-size:30px}
+  .map-label{font-size:7px;width:52px}
+  #mapPanel{left:auto;right:auto;top:auto;bottom:auto;width:98%;height:clamp(225px,51vh,345px);margin:0 auto 2px;padding:10px 12px 10px 132px;border-width:3px}#mapPanel .mp-go-wrap{width:104px}#mapPanel .mp-go{width:92px;height:42px;font-size:11px}
+
+  /* ---- 弹窗 / 卡片网格 ---- */
+  .modal-box{width:min(440px,96vw);max-height:90vh}
+  .te-fullscreen .te-narr{font-size:15px;min-height:110px;padding:16px 140px 16px 20px}
+  .te-fullscreen .te-name{font-size:18px;margin-bottom:10px}
+}
+
+/* 竖屏手机下如果页面需要，也把 #app 的高度处理交给浏览器动态栏（dvh 兜底） */
+@supports (height:100dvh){ #app{height:100dvh} }
+
+/* ============================================================
+   触屏拖拽修复（2026-08-29 v0.14.2）
+   手牌区是横向滚动容器，触屏下浏览器默认把滑动当滚动，
+   会吞掉 pointermove 导致卡牌拖不动。给手牌禁掉手势，出牌区放行。
+   ============================================================ */
+@media (pointer:coarse){
+  #handArea .hand-card{ touch-action:none }          /* 卡片上拖动=拖牌（禁浏览器手势） */
+  #handArea{ touch-action:pan-x }                    /* 空白处滑动=横向查看手牌 */
+  #monsterHandRow{ touch-action:pan-x }              /* 怪物手牌：允许横向滑动查看 */
+  #playZone{ touch-action:manipulation }             /* 出牌区：禁止双击缩放 */
+  #battleStage{ touch-action:manipulation }
+  .map-scroll{ touch-action:pan-x }                  /* 地图：允许横向平移 */
+  #main{ touch-action:pan-y }                        /* 其他页面：允许纵向滚动，禁缩放 */
+}
+/* 小蕾新专属事件框：上半区三段等宽流式文本，下半区自适应选项。 */
+.start-character-event.xiaolei-special-frame .sce-window{background-image:url('UI/小蕾事件框.png')}
+.te-fullscreen.xiaolei-special-frame{background-image:var(--event-frame-bg,url('UI/小蕾事件框.png'));background-size:contain}
+.xiaolei-segment-grid{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(3,minmax(0,1fr));gap:8px;width:100%;height:100%}
+.xiaolei-segment{display:none;box-sizing:border-box;height:100%;min-width:0;padding:14px 15px;border:2px dashed rgba(48,111,167,.78);border-radius:10px;background:rgba(255,255,255,.58);color:#26445f;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow:auto;text-align:left;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
+.xiaolei-segment.visible{display:block;animation:xiaoleiSegIn .24s ease-out}
+@keyframes xiaoleiSegIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.start-character-event.xiaolei-special-frame .xiaolei-segment-grid{position:absolute;z-index:3;left:5%;right:31%;top:15%;width:auto;height:39%}
+.start-character-event.xiaolei-special-frame .sce-options{display:grid;grid-auto-rows:minmax(44px,auto);gap:10px;left:5%;right:31%;bottom:8%;height:auto;max-height:30%;overflow:auto}
+.start-character-event.xiaolei-special-frame .sce-option{min-width:0;width:100%;margin:0;background:#f3e4bd;border-color:#c9a96a;color:#59472f}
+.start-character-event.xiaolei-special-frame .sce-option:hover{background:#f8eccd;border-color:#b88d49}
+.te-fullscreen.xiaolei-special-frame .te-narr{top:15%;bottom:auto;height:39%;padding:0;background:transparent;border:0;overflow:visible}
+.te-fullscreen.xiaolei-special-frame #te-opts{display:grid;gap:10px;top:61%;bottom:auto;max-height:30%;overflow:auto}
+.te-fullscreen.xiaolei-special-frame #te-opts .te-opt{min-width:0;margin:0;text-align:center;height:100%}
+.te-fullscreen.xiaolei-special-frame.xiaolei-talent-pick .te-pick{display:grid;grid-template-columns:repeat(var(--option-count,3),minmax(0,1fr));gap:12px;left:5%;top:58%;bottom:6%;width:62%;overflow:auto;align-items:stretch}
+.te-fullscreen.xiaolei-special-frame.xiaolei-talent-pick .te-pick .card{min-width:0;height:100%;overflow:auto;box-sizing:border-box}
+/* 通用事件框：与小蕾事件统一为三段流式文本和纵向选项；背景可由事件 image 字段替换。 */
+.te-fullscreen.common-event-frame{background:#070b10 var(--event-frame-bg,url('UI/通用事件框.png')) center/contain no-repeat}
+.te-fullscreen.common-event-frame:after,.te-fullscreen.common-event-frame .te-holes,.te-fullscreen.common-event-frame .te-ava{display:none!important}
+.te-fullscreen.common-event-frame .te-top{position:absolute;z-index:2;left:5%;top:5%;margin:0;color:#3273ab}
+.te-fullscreen.common-event-frame .te-name{position:absolute;z-index:2;left:5%;top:10%;width:62%;margin:0;color:#315d91;text-align:left}
+.te-fullscreen.common-event-frame .te-narr{position:absolute;left:5%;top:15%;width:62%;height:39%;min-height:0;padding:0;background:transparent;border:0;overflow:visible;text-align:left;box-sizing:border-box}
+.te-fullscreen.common-event-frame #te-opts{position:absolute;left:5%;top:61%;bottom:auto;width:62%;max-height:30%;margin:0;display:grid;grid-template-columns:minmax(0,1fr)!important;gap:10px;overflow:auto}
+.te-fullscreen.common-event-frame .te-opt{box-sizing:border-box;width:100%;min-width:0;margin:0;padding:10px 14px;text-align:center;background:rgba(255,255,255,.9);border:2px solid #72aee0;color:#295b86}
+.te-fullscreen.common-event-frame .te-opt:hover{background:#ffffff;border-color:#4d96d6}
+.te-fullscreen.common-event-frame .xiaolei-segment{text-align:left!important}
+.te-fullscreen.common-event-frame .te-opt small{display:block;margin-top:3px;color:#876f50;font-size:10px}
+.te-fullscreen.character-frame-xiaomeng,.te-fullscreen.character-frame-xiaomeng-fiora{background-color:#f7f7fb;background-position:center;background-size:cover;background-repeat:no-repeat}.te-fullscreen.character-frame-xiaomeng{background-image:url('UI/小萌事件框.png')}.te-fullscreen.character-frame-xiaomeng-fiora{background-image:url('UI/剑姬哓萌事件框.png')}.te-fullscreen.character-frame-xiaomeng .te-holes,.te-fullscreen.character-frame-xiaomeng-fiora .te-holes,.te-fullscreen.character-frame-xiaomeng .te-ava,.te-fullscreen.character-frame-xiaomeng-fiora .te-ava{display:none}.te-fullscreen.character-frame-xiaomeng .te-narr,.te-fullscreen.character-frame-xiaomeng-fiora .te-narr{left:7%;right:34%;width:auto;background:rgba(255,255,255,.5);color:#332e45}.te-fullscreen.character-frame-xiaomeng #te-opts,.te-fullscreen.character-frame-xiaomeng-fiora #te-opts{left:7%;right:34%;width:auto}
+.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{background-color:#f7f7fb;background-position:center;background-size:cover;background-repeat:no-repeat}.start-character-event.character-frame-xiaomeng .sce-window{background-image:url('UI/小萌事件框.png')}.start-character-event.character-frame-xiaomeng-fiora .sce-window{background-image:url('UI/剑姬哓萌事件框.png')}.start-character-event.character-frame-xiaomeng .sce-bg,.start-character-event.character-frame-xiaomeng-fiora .sce-bg,.start-character-event.character-frame-xiaomeng .sce-shade,.start-character-event.character-frame-xiaomeng-fiora .sce-shade,.start-character-event.character-frame-xiaomeng .sce-avatar,.start-character-event.character-frame-xiaomeng-fiora .sce-avatar{display:none}.start-character-event.character-frame-xiaomeng .sce-scene,.start-character-event.character-frame-xiaomeng-fiora .sce-scene{background:transparent}.start-character-event.character-frame-xiaomeng .sce-dialogue,.start-character-event.character-frame-xiaomeng-fiora .sce-dialogue{background:rgba(255,255,255,.72);color:#332e45}
+/* 所有角色事件框统一完整铺满画布，避免 cover 裁掉四周边缘。 */
+.te-fullscreen.xiaolei-special-frame,.te-fullscreen.common-event-frame,.te-fullscreen.character-frame-xiaomeng,.te-fullscreen.character-frame-xiaomeng-fiora{background-size:100% 100% !important;background-position:center;background-repeat:no-repeat}
+.start-character-event.xiaolei-special-frame .sce-window,.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{background-size:100% 100% !important;background-position:center;background-repeat:no-repeat}
+/* 专属事件只使用专属背景框，不再叠加通用窗口、对话框边框或额外底板。 */
+.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{border:0;border-radius:0;box-shadow:none}
+.start-character-event.xiaolei-special-frame .sce-dialogue,.start-character-event.character-frame-xiaomeng .sce-dialogue,.start-character-event.character-frame-xiaomeng-fiora .sce-dialogue{background:transparent;border:0;box-shadow:none}
+.te-fullscreen.character-frame-xiaomeng .te-narr,.te-fullscreen.character-frame-xiaomeng-fiora .te-narr{background:transparent;border:0;box-shadow:none}
+/* 开局专属事件也完全使用专属框布局，不保留默认标题栏、窗口底板和底部栏。 */
+.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{position:relative;width:min(1100px,96vw);height:auto;aspect-ratio:16/9;background-color:#070b10}
+.start-character-event.character-frame-xiaomeng .sce-title,.start-character-event.character-frame-xiaomeng-fiora .sce-title{position:absolute;left:5%;top:5%;z-index:3;padding:0;color:#76552f;text-shadow:0 1px #fff}
+.start-character-event.character-frame-xiaomeng .sce-scene,.start-character-event.character-frame-xiaomeng-fiora .sce-scene{position:absolute;inset:0}
+.start-character-event.character-frame-xiaomeng .sce-options,.start-character-event.character-frame-xiaomeng-fiora .sce-options{position:absolute;z-index:4;left:7%;right:34%;bottom:7%;padding:0;background:transparent}
+/* 小蕾使用最新版透明事件框，清除旧版黑底。 */
+.start-character-event.xiaolei-special-frame .sce-window{background-color:transparent!important;background-image:url('UI/小蕾事件框.png')!important;background-size:100% 100%!important}
+.te-fullscreen.xiaolei-special-frame{background-color:transparent!important;background-image:var(--event-frame-bg,url('UI/小蕾事件框.png'))!important;background-size:100% 100%!important}
+/* 所有事件框外层统一透明，不再用黑色底衬托透明素材。 */
+.start-character-event.xiaolei-special-frame,.start-character-event.character-frame-xiaomeng,.start-character-event.character-frame-xiaomeng-fiora{background:#f7f7fb!important}
+.te-fullscreen.common-event-frame,.te-fullscreen.character-frame-xiaomeng,.te-fullscreen.character-frame-xiaomeng-fiora{background-color:#f7f7fb!important}
+.start-character-event.xiaolei-special-frame .sce-window{background-color:#f7f7fb!important}
+/* 统一回到小蕾专属事件框的底层与布局，其他角色只替换专属素材。 */
+.start-character-event.xiaolei-special-frame,.start-character-event.character-frame-xiaomeng,.start-character-event.character-frame-xiaomeng-fiora{background:rgba(3,8,16,.72)!important}
+.start-character-event.xiaolei-special-frame .sce-window,.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{background-color:#070b10!important;background-size:100% 100%!important;border:0;border-radius:0;box-shadow:none}
+.te-fullscreen.character-frame-xiaomeng,.te-fullscreen.character-frame-xiaomeng-fiora{background-color:#070b10!important;background-size:100% 100%!important}
+/* 最终统一：专属事件外层与窗口底色均透明，只显示专属事件框素材。 */
+.start-character-event.xiaolei-special-frame,.start-character-event.character-frame-xiaomeng,.start-character-event.character-frame-xiaomeng-fiora{background:transparent!important}
+.start-character-event.xiaolei-special-frame .sce-window,.start-character-event.character-frame-xiaomeng .sce-window,.start-character-event.character-frame-xiaomeng-fiora .sce-window{background-color:transparent!important}
+.te-fullscreen.xiaolei-special-frame,.te-fullscreen.character-frame-xiaomeng,.te-fullscreen.character-frame-xiaomeng-fiora{background-color:transparent!important}
+/* 小萌事件框使用透明外部底图，与小蕾事件框保持一致。 */
+.te-fullscreen.character-frame-xiaomeng{background-image:url('UI/小萌事件框-透明版.png')!important}
+.start-character-event.character-frame-xiaomeng .sce-window{background-image:url('UI/小萌事件框-透明版.png')!important}
+/* 今日统一视觉：除小蕾专属外，系统面板与普通卡面统一米黄色。 */
+.card:not(.face-xiaolei):not(.face-character-frame),.modal-box:not(.modal-te),.modal,.shop-product,#playerZone,.et-energy{background:#fbf1d8!important;border-color:#c9ad75!important;color:#4a3822!important}
+#topBar,#bottomBar{background:#ead7ad!important;border-color:#c9ad75!important;color:#4a3822!important}#topBar .stat{background:#fbf1d8!important;color:#59472f!important;border:1px solid #c9ad75}.section-title{color:#765f3d!important}
+.card:not(.face-xiaolei) .desc,.card:not(.face-xiaolei) .card-notes,.card:not(.face-xiaolei) .name,.shop-product b,.shop-product small{color:#59472f!important}
+.card:not(.face-xiaolei):not(.face-character-frame).logic,.card:not(.face-xiaolei):not(.face-character-frame).idea,.card:not(.face-xiaolei):not(.face-character-frame).answer,.card:not(.face-xiaolei):not(.face-character-frame).tool{background:#fbf1d8!important;border-color:#c9ad75!important}
+.card.hand-card.logic:not(.face-xiaolei):not(.face-character-frame) .desc{background:#a94444!important;color:#fff5ee!important;border-radius:0 0 8px 8px}
+.card.hand-card.idea:not(.face-xiaolei):not(.face-character-frame) .desc{background:#416f9f!important;color:#f2f8ff!important;border-radius:0 0 8px 8px}
+.card.hand-card.answer:not(.face-xiaolei):not(.face-character-frame) .desc{background:#c9a43a!important;color:#3f3012!important;border-radius:0 0 8px 8px;box-shadow:inset 0 2px 0 rgba(115,82,12,.2)}
+.card.hand-card.tool:not(.face-xiaolei):not(.face-character-frame) .desc{background:#43865c!important;color:#effff3!important;border-radius:0 0 8px 8px}
+.card.hand-card.trap:not(.face-xiaolei):not(.face-character-frame) .desc{background:#79509b!important;color:#fff4ff!important;border-radius:0 0 8px 8px}
+/* 卡面临时统一：主体与无插画区域使用白色，卡名恢复黑色；类型效果区颜色保持不变。 */
+.card{background:#fff!important}
+.card.hand-card .card-art{background:#fff!important}
+.card.hand-card .card-art.no-art{background:#fff!important}
+/* 手牌作为整体高于出牌区；悬浮描述仍留在外框下方。 */
+#handRow{position:relative;z-index:10;overflow:visible}
+.stage-main .player-half{overflow:visible}
+.card.hand-card:hover .desc{z-index:4}
+.card.hand-card.face-xiaolei::before,.card.hand-card.face-character-frame::before,.card.hand-card.face-standard::before{z-index:30}
+/* 所有卡牌统一采用小蕾卡面的内外尺寸基准。 */
+.card.hand-card.face-character-frame,.card.hand-card.face-standard{width:120px;height:185px;min-width:0;max-width:none;padding:0;border-radius:0;box-sizing:border-box}
+.card.hand-card.face-character-frame::before,.card.hand-card.face-standard::before{left:48.5%;transform:translateX(-50%);top:-20%;bottom:-7%;width:118%;box-sizing:border-box}
+.card.hand-card.face-standard{margin:0;background:#fbf1d8!important;border:0!important}
+.card.hand-card.face-standard::before{border:3px solid #c9ad75;border-radius:0;box-shadow:inset 0 0 0 2px #f6e6bd,0 0 0 2px #e4cc98}
+.card.hand-card.face-character-frame .card-art,.card.hand-card.face-standard .card-art{flex:2;margin-top:1%;margin-left:.5%;border-radius:0}
+.card.hand-card.face-character-frame .desc,.card.hand-card.face-standard .desc{flex:1;min-height:0;border-top:1.5px dashed rgba(140,105,50,.45);box-sizing:border-box}
+.card.hand-card.face-xiaolei .card-art,.card.hand-card.face-character-frame .card-art,.card.hand-card.face-standard .card-art{position:relative;top:-8px;z-index:1}
+.card.hand-card.face-xiaolei::before,.card.hand-card.face-character-frame::before,.card.hand-card.face-standard::before{z-index:30;pointer-events:none}
+.card.hand-card.face-xiaolei::before,.card.hand-card.face-character-frame::before,.card.hand-card.face-standard::before{bottom:0}
+.card.hand-card.face-xiaolei .desc,.card.hand-card.face-character-frame .desc,.card.hand-card.face-standard .desc{position:relative;z-index:4;margin-top:-8px;margin-bottom:8px}
+.card.hand-card.face-xiaolei .card-art,.card.hand-card.face-xiaolei .desc,.card.hand-card.face-character-frame .card-art,.card.hand-card.face-character-frame .desc,.card.hand-card.face-standard .card-art,.card.hand-card.face-standard .desc{transform:translateY(-8px)}
+.card .name{background:#fff!important;color:#111!important;text-shadow:none!important}
+.modal-box h3,#mapPanel .mp-title{color:#765f3d!important}.modal-box [style*="#8ab4f8"],#mapPanel .mp-row{color:#765f3d!important}
+.choice-close{position:absolute;right:8px;top:7px;width:28px;height:28px;border:2px solid #b9965c;border-radius:50%;background:#fff8e8;color:#765f3d;font-size:20px;line-height:20px;cursor:pointer;z-index:5}
+.partner-pick-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}.partner-big-card{min-height:430px;background:#fbf1d8;border:3px solid #c9ad75;border-radius:14px;overflow:hidden;color:#4a3822;cursor:pointer;display:flex;flex-direction:column}.partner-portrait{height:270px;background:linear-gradient(#ead7ad,#f8efd8);display:flex;align-items:center;justify-content:center;font-size:100px;border-bottom:2px solid #c9ad75}.partner-detail{padding:12px;line-height:1.55}.partner-skill{margin-top:8px;color:#765219;font-size:11px}.partner-upgrades{margin-top:9px;padding-top:8px;border-top:1px dashed #b9965c;color:#765f3d;font-size:10px}
+.book-reward-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:16px}.book-reward-card{min-height:250px;padding:18px;background:#fbf1d8;border:3px solid #c9ad75;border-radius:14px;color:#4a3822;text-align:center;cursor:pointer}.book-reward-icon{font-size:70px}.book-reward-card p{font-size:12px;line-height:1.6}.book-reward-card small{color:#765f3d}
+.lottery-tip{float:right;width:112px;margin:0 0 8px 10px;padding:9px;background:#f3e4bd;border:1px dashed #b9965c;border-radius:8px;color:#765f3d;font-size:10px;line-height:1.5}.lottery-error{min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#7c3b2a;cursor:pointer}.lottery-error b{font-size:20px}.lottery-error small{color:#765f3d}
+.battle-victory-pop{position:absolute;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;background:rgba(60,42,22,.16)}.battle-victory-pop .paper-box{width:min(340px,76vw);padding:24px;text-align:center;box-shadow:0 16px 36px #36240f66}.battle-victory-pop h2{margin:0 0 8px;color:#765219}.battle-victory-pop .btn{width:70%;margin-top:8px}.reward-item{width:120px;box-sizing:border-box;margin:6px auto 0;padding:6px 8px;border:1px solid #c9ad75;border-radius:7px;background:#fbf1d8;color:#59472f;font-size:10px;text-align:left}.reward-item-name{font-weight:800;text-align:center;margin-bottom:4px}.reward-item-desc{padding-top:4px;border-top:1px dashed #c9ad75;line-height:1.45;color:#6b5638;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:760px){.partner-pick-grid{grid-template-columns:repeat(3,220px);overflow-x:auto}.partner-big-card{min-height:350px}.partner-portrait{height:205px}.book-reward-grid{grid-template-columns:1fr}}
+</style>
+<style>
+/* 鹅城百科：全屏米黄色图鉴 */
+.encyclopedia-mode{overflow:hidden!important;padding:0!important;background:#f5ead2;color:#4a3323}
+.codex-page{width:100%;height:100%;min-height:100vh;box-sizing:border-box;padding:18px 28px 24px;background:#f5ead2;display:flex;flex-direction:column;gap:14px}
+.codex-top{min-height:58px;display:grid;grid-template-columns:130px 1fr 2.8fr;align-items:center;border-bottom:3px solid #a77a45;gap:14px}
+.codex-title{text-align:center;font-size:30px;font-weight:bold;letter-spacing:8px;color:#573b25}
+.codex-back,.codex-page-tab{border:2px solid #a77a45;background:#ead5ad;color:#573b25;border-radius:10px;cursor:pointer;font:inherit;font-weight:bold;padding:8px 12px}
+.codex-pages{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}.codex-page-tab{font-size:13px;padding:7px 10px}.codex-page-tab.active{background:#a77a45;color:#fff7e8}
+.codex-body{min-height:0;flex:1;display:grid;grid-template-columns:2fr 1fr;gap:18px}.codex-list{min-width:0;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));grid-auto-rows:112px;gap:12px;padding:4px 10px 10px 4px;align-content:start}
+.codex-item{min-width:0;border:3px solid #b9a98f;border-radius:12px;background:#d2cec6;color:#777;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:7px;box-shadow:0 3px 0 #b9a98f}.codex-item.known{background:#fffaf0;color:#4a3323;border-color:#c9ad75}.codex-item.selected{outline:4px solid #a77a45;transform:translateY(-2px)}.codex-item b{font-size:13px;line-height:1.2;text-align:center;overflow-wrap:anywhere}.codex-art{width:54px;height:54px;border-radius:8px;display:grid;place-items:center;background:#e1ddd5;font-size:30px;color:#8f8b83}.known .codex-art{background:#ead5ad}.codex-detail{min-width:0;overflow:auto;border:5px solid #c9ad75;border-radius:18px;background:#fffaf0;padding:24px;box-shadow:0 4px 0 #b99a6c}.codex-detail.locked{background:#dedbd5;color:#888;border-color:#b9b4ab}.codex-detail h1{text-align:center;margin:0 0 14px;padding-bottom:12px;border-bottom:2px dashed #c9ad75;font-size:27px}.codex-detail-line{line-height:1.8;color:#765434;border-bottom:1px solid #ead5ad;padding-bottom:12px}.codex-detail-desc{white-space:pre-wrap;line-height:1.8;margin-top:14px}.codex-detail p{line-height:1.8}.codex-lottery{margin-top:16px;border-top:1px dashed #c9ad75;padding-top:12px}.codex-none{grid-column:1/-1;text-align:center;color:#a58b69;padding:50px}.codex-item.unknown .codex-art{background:#bdb9b0;color:#eee}
+@media(max-width:900px){.codex-page{padding:12px}.codex-top{grid-template-columns:80px 1fr;}.codex-pages{grid-column:1/-1;justify-content:center}.codex-body{grid-template-columns:1fr}.codex-detail{min-height:240px}.codex-list{grid-template-columns:repeat(4,minmax(75px,1fr));grid-auto-rows:96px}.codex-item b{font-size:11px}.codex-art{width:40px;height:40px;font-size:22px}}
+</style>
+<style id="custom-layout">
+/* 由游戏编辑器生成（layout.json），手动改布局后需在编辑器里重新保存 */
+</style>
+
+<style>
+/* 结算页：统一大屏米黄色布局，左卡组/中结算/右统计。 */
+#main.settlement-mode{padding:0;overflow:hidden;background:#f7e8c4!important;color:#4a3822!important}
+.settlement-page{height:100%;min-height:620px;box-sizing:border-box;display:grid;grid-template-columns:16% 64% 20%;position:relative;background:#f7e8c4;padding:22px;gap:18px}
+.settlement-page h1,.settlement-page h2,.settlement-page h3,.settlement-page p{margin:0;color:#5b4429}.settlement-page h2{font-size:17px;border-bottom:2px solid #c9ad75;padding-bottom:8px;margin-bottom:12px}.settlement-page h3{font-size:16px;border-bottom:2px solid #c9ad75;padding-bottom:10px;margin-bottom:10px}
+.settlement-deck,.settlement-summary,.settlement-earned,.settlement-side>div{background:#fff8e8;border:3px solid #c9ad75;border-radius:14px;box-shadow:0 4px 12px #8a673522;box-sizing:border-box}
+.settlement-deck{padding:12px;overflow:hidden}.settlement-deck-list{height:calc(100% - 42px);overflow-y:auto;padding-right:4px}.settlement-deck-card{display:flex;align-items:center;gap:5px;background:#fff;border:1px solid #d8bd88;border-radius:7px;padding:5px 3px;margin:5px 0;font-size:11px;min-height:188px}.settlement-deck-card>span{color:#a18455;width:15px;flex:0 0 15px;text-align:center}.settlement-deck-card .settlement-card-face{transform:scale(.82);transform-origin:center;cursor:help}.settlement-deck-card .settlement-card-face:hover{transform:scale(.82);z-index:20}.settlement-deck-card .card-hover-popup{z-index:100;left:calc(100% + 8px);right:auto;top:0;width:230px;pointer-events:none}
+.settlement-center{display:flex;flex-direction:column;gap:18px;min-width:0}.settlement-summary{padding:26px;text-align:center;flex:0 0 48%}.settlement-icon{font-size:56px}.settlement-summary h1{font-size:30px;margin:8px 0 22px;color:#8a5b20}.settlement-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.settlement-metrics div{background:#f7e8c4;border:2px solid #d4b77d;border-radius:10px;padding:14px 5px}.settlement-metrics small{display:block;font-size:12px}.settlement-metrics strong{display:block;font-size:27px;color:#a56618;margin-top:7px}.settlement-earned{padding:20px;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;overflow:auto}.settlement-earned p,.settlement-side p{font-size:13px;line-height:1.8;overflow-wrap:anywhere}.settlement-side{display:flex;flex-direction:column;gap:18px;min-width:0}.settlement-side>div{padding:16px;overflow:auto}.settlement-side>div:first-child{flex:1}.settlement-side>div:last-child{flex:1.4}.settlement-back{position:absolute;left:16%;top:calc(100% - 62px);width:160px;height:38px;background:#a97835!important;border-color:#80551e!important;color:#fff!important}
+@media(max-width:900px){.settlement-page{grid-template-columns:20% 55% 25%;padding:10px;gap:8px}.settlement-summary{padding:14px}.settlement-summary h1{font-size:22px}.settlement-metrics{gap:4px}.settlement-metrics strong{font-size:20px}.settlement-earned{grid-template-columns:1fr}.settlement-back{left:20%}}
+</style>
+<style>
+/* ============================================================
+   旋转引导层（2026-08-29 v0.14.2）
+   仅触屏 + 竖屏时全屏提示"请横屏游玩"，横屏后自动消失。
+   纯 CSS 媒体查询控制，无 JS 逻辑。
+   ============================================================ */
+#rotateGuide{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
+  flex-direction:column;gap:26px;text-align:center;color:#fff;pointer-events:auto;
+  background:radial-gradient(circle at 50% 40%,rgba(10,22,40,.96),rgba(4,10,20,.98));
+  -webkit-user-select:none;user-select:none}
+#rotateGuide .rg-icon{width:96px;height:96px;position:relative}
+#rotateGuide .rg-icon svg{width:100%;height:100%}
+#rotateGuide .rg-icon .phone{animation:rgSpin 1.6s cubic-bezier(.45,.05,.55,.95) infinite}
+#rotateGuide .rg-title{font-size:22px;font-weight:bold;letter-spacing:3px;color:#ffd700;
+  text-shadow:0 0 16px rgba(255,215,0,.5)}
+#rotateGuide .rg-sub{font-size:13px;color:#8ab4f8;line-height:1.7;padding:0 32px}
+@keyframes rgSpin{
+  0%{transform:rotate(0deg)}
+  55%{transform:rotate(90deg)}
+  100%{transform:rotate(90deg)}
+}
+/* 竖屏触屏：显示引导层 */
+@media (orientation:portrait) and (pointer:coarse){
+  #rotateGuide{display:flex}
+}
+/* 横屏兜底：无论 pointer 类型，横屏一律隐藏引导层（双保险，2026-08-29） */
+@media (orientation:landscape){
+  #rotateGuide{display:none !important}
+}
+/* 桌面/非触屏兜底：默认隐藏 */
+@media (any-pointer:fine){
+  #rotateGuide{display:none !important}
+}
+</style>
+<style>
+/* 普通立绘完整展示，气泡在游戏内容上方；设置仍可操作。 */
+.producer-dialogue-layer,.tutorial-talk{z-index:100010!important;overflow:visible}
+.producer-dialogue,.tutorial-talk{max-width:94vw;overflow:visible}
+.producer-dialogue-avatar,.tutorial-talk>img{position:relative;z-index:2;width:clamp(70px,12vw,140px);height:min(30vh,230px);flex:0 0 clamp(70px,12vw,140px);object-fit:contain;object-position:center bottom;border:0;border-radius:0;background:transparent}
+.producer-dialogue-bubble,.tutorial-talk-box{min-width:0;overflow-wrap:anywhere;max-height:65vh;overflow-y:auto}
+.sce-avatar{object-fit:contain;border:0;border-radius:0;background:transparent;z-index:3}
+.sce-dialogue{z-index:4}
+body:has(.tutorial-talk) #settingsToggle,body:has(.producer-dialogue-layer) #settingsToggle{z-index:100020!important}
+body:has(.tutorial-talk) #settingsOverlay,body:has(.producer-dialogue-layer) #settingsOverlay{z-index:100030!important}
+</style>
+<style>.codex-art img{width:100%;height:100%;object-fit:contain;border-radius:inherit}.codex-item.unknown .codex-art img{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <div id="topBar"></div>
+  <div id="main"></div>
+  <div id="bottomBar"></div>
+</div>
+<div id="toastContainer"></div>
+<div id="rotateGuide">
+  <div class="rg-icon">
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect class="phone" x="36" y="6" width="28" height="88" rx="6" stroke="#ffd700"
+        stroke-width="3.5" fill="rgba(255,215,0,.06)"/>
+      <line x1="46" y1="14" x2="54" y2="14" stroke="#fff" stroke-opacity=".55" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="50" cy="86" r="3" fill="#ffd700" fill-opacity=".85"/>
+      <path d="M63 20 C86 20 86 36 78 44 L90 44 L90 84 L66 84 L66 44 L78 44 C84 38 84 26 63 26"
+        stroke="#8ab4f8" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="rg-title">请横置手机游玩</div>
+  <div class="rg-sub">将手机旋转至横屏方向，即可获得最佳游戏体验<br>本游戏为横屏卡牌 RPG</div>
+</div>
+<script src="version.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/monsters-expanded.js"></script><script src="js/events-expanded.js"></script>
+<script src="js/editor-overrides.js"></script>
+<script src="js/editor-store.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/monster-fallbacks.js"></script>
+<script src="js/map.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/dialogues.js"></script>
+<script>if(G.applyEditorOverrides)G.applyEditorOverrides();</script>
+<script src="js/scenes.js"></script>
+<script src="js/encyclopedia.js"></script>
+<script src="js/tutorial.js"></script>
+<script src="js/autosave.js"></script>
+</body>
+</html>
